@@ -1,0 +1,249 @@
+/* 对话 → 思考 → 执行 → 结果 四段式 Agent 流 */
+
+.paradigm-dialogue {
+  padding: 12px 0 8px;
+  border-top: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
+}
+
+.paradigm-dialogue-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.paradigm-file-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: var(--surface-elevated, #2a2a2a);
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.1));
+  font-size: 13px;
+  color: var(--text-primary, #e8e8e8);
+}
+
+.paradigm-file-chip-icon {
+  color: var(--text-secondary, #9ca3af);
+  flex-shrink: 0;
+}
+
+.paradigm-file-chip-name {
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.paradigm-dialogue-action {
+  font-size: 13px;
+  color: var(--text-secondary, #a3a3a3);
+}
+
+.paradigm-dialogue-text {
+  margin-top: 8px;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--text-primary, #e8e8e8);
+  white-space: pre-wrap;
+}
+
+.paradigm-dialogue-attachments {
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.paradigm-agent-turn {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px 0 16px;
+  font-family: var(--font-agent, "Courier New", Consolas, monospace);
+}
+
+.paradigm-phase {
+  margin: 2px 0;
+}
+
+.paradigm-phase-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 0;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary, #9ca3af);
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.paradigm-phase-head--static {
+  cursor: default;
+}
+
+.paradigm-phase-head:hover:not(.paradigm-phase-head--static) {
+  color: var(--text-primary, #d4d4d4);
+}
+
+.paradigm-phase-icon {
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+
+.paradigm-phase-title {
+  font-weight: 500;
+}
+
+.paradigm-phase-chevron {
+  margin-left: auto;
+  opacity: 0.6;
+  transition: transform 0.15s ease;
+}
+
+.paradigm-phase-chevron--open {
+  transform: rotate(180deg);
+}
+
+.paradigm-phase-body {
+  padding: 4px 0 8px 22px;
+}
+
+.paradigm-phase-body--thinking {
+  padding-left: 0;
+}
+
+.paradigm-phase-body--result {
+  padding-left: 0;
+}
+
+.paradigm-phase--result .paradigm-phase-head {
+  color: var(--text-secondary, #9ca3af);
+}
+
+.paradigm-processing {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--text-muted, #737373);
+}
+
+.paradigm-exec-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+  font-size: 13px;
+  color: var(--text-secondary, #a3a3a3);
+}
+
+.paradigm-exec-em {
+  color: var(--text-primary, #e5e5e5);
+}
+
+.paradigm-exec-detail {
+  margin-left: 4px;
+  font-size: 12px;
+  color: var(--text-muted, #737373);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: min(480px, 70vw);
+}
+
+.paradigm-exec-icon {
+  flex-shrink: 0;
+  opacity: 0.75;
+}
+
+.paradigm-exec-icon--done {
+  color: var(--accent, #22c55e);
+}
+
+.paradigm-exec-spin {
+  animation: paradigm-spin 0.9s linear infinite;
+  color: var(--text-muted, #737373);
+}
+
+@keyframes paradigm-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.paradigm-terminal {
+  margin: 6px 0 10px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.12));
+  border-top: 2px solid var(--accent, #22c55e);
+  background: var(--surface-inset, #141414);
+}
+
+.paradigm-terminal-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--accent, #4ade80);
+  border-bottom: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.06));
+}
+
+.paradigm-terminal-cmd {
+  margin: 0;
+  padding: 10px 12px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-primary, #e8e8e8);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.paradigm-todos-inline {
+  margin-top: 8px;
+}
+
+.paradigm-exec-chevron {
+  margin-left: 4px;
+  opacity: 0.5;
+}
+
+.paradigm-stall-banner {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 4px 0 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(234, 179, 8, 0.35);
+  background: rgba(234, 179, 8, 0.08);
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text-primary, #e8e8e8);
+}
+
+.paradigm-stall-banner p {
+  margin: 0;
+}
+
+.paradigm-stall-cancel {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.2));
+  background: transparent;
+  color: var(--text-primary, #e8e8e8);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.paradigm-stall-cancel:hover {
+  border-color: var(--accent, #22c55e);
+  color: var(--accent, #4ade80);
+}

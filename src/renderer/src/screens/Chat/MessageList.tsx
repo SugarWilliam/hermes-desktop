@@ -1,71 +1,169 @@
 import { memo, useMemo } from "react";
-import { HermesAvatar, MessageRow } from "./MessageRow";
+import type { ChatMode } from "../../../../shared/chatMode";
+import { MessageRow } from "./MessageRow";
 import { ReasoningRow, ToolCallRow, ToolResultRow } from "./HistoryRow";
-import type { ChatMessage } from "./types";
+import { DialogueBlock } from "./DialogueBlock";
+import { AgentTurnView } from "./AgentTurnView";
+import { buildAgentRunSteps } from "./AgentRunPanel";
+import { extractCurrentTurnTodos } from "./agentTodos";
+import {
+  buildAgentTurnPhases,
+  splitMessagesIntoTurns,
+} from "./agentTurnPhases";
+import { orderMessagesForDisplay } from "./messageDisplayOrder";
+import { APPROVAL_RE } from "./messageApproval";
+import { useI18n } from "../../components/useI18n";
+import type { ChatBubbleMessage, ChatMessage } from "./types";
+import type { StreamStallState } from "./hooks/useStreamStall";
 
 interface MessageListProps {
   messages: ChatMessage[];
   isLoading: boolean;
   toolProgress: string | null;
+  toolProgressLog: string[];
+  chatMode: ChatMode;
+  streamStall?: StreamStallState;
+  onAbort?: () => void;
   onApprove: () => void;
   onDeny: () => void;
 }
 
-function TypingIndicator({
-  toolProgress,
-}: {
-  toolProgress: string | null;
-}): React.JSX.Element {
-  return (
-    <div className="chat-message chat-message-agent">
-      <HermesAvatar />
-      <div className="chat-bubble chat-bubble-agent">
-        {toolProgress ? (
-          <div className="chat-tool-progress">{toolProgress}</div>
-        ) : (
-          <div className="chat-typing">
-            <span className="chat-typing-dot" />
-            <span className="chat-typing-dot" />
-            <span className="chat-typing-dot" />
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-/**
- * Bubble messages are filtered to "has content". History items (reasoning,
- * tool_call, tool_result) are *always* shown — they're collapsed by default
- * and the user opens them. Filtering them by content would defeat the point.
- */
-function isBubble(m: ChatMessage): m is import("./types").ChatBubbleMessage {
-  // Bubble messages have no `kind` field (or kind === "user"/"assistant").
-  // History items have kind === "reasoning" | "tool_call" | "tool_result".
+function isBubble(m: ChatMessage): m is ChatBubbleMessage {
   const k = (m as { kind?: string }).kind;
   return !k || k === "user" || k === "assistant";
+}
+
+function turnHasAgentActivity(turn: ChatMessage[]): boolean {
+  for (const m of turn) {
+    if (m.kind === "reasoning" && (m.text || "").trim()) return true;
+    if (m.kind === "tool_call" || m.kind === "tool_result") return true;
+    if (isBubble(m) && m.role === "agent" && (m.content || "").trim()) {
+      return true;
+    }
+  }
+  return false;
 }
 
 export const MessageList = memo(function MessageList({
   messages,
   isLoading,
   toolProgress,
+  toolProgressLog,
+  chatMode,
+  streamStall,
+  onAbort,
   onApprove,
   onDeny,
 }: MessageListProps): React.JSX.Element {
-  // Bubbles with empty content are still hidden (live-stream placeholders).
-  // History rows pass through unconditionally.
-  const visibleMessages = useMemo(
-    () =>
-      messages.filter((m) => {
-        if (!isBubble(m)) return true;
-        return ((m.content as string) || "").trim().length > 0;
-      }),
+  const { t } = useI18n();
+  const orderedMessages = useMemo(
+    () => orderMessagesForDisplay(messages),
     [messages],
   );
 
-  const lastBubble = [...messages].reverse().find(isBubble);
-  const lastMessageIsAgent = !!lastBubble && lastBubble.role === "agent";
+  const agentModeUi = chatMode === "agent" || chatMode === "plan";
+  const currentTodos = useMemo(
+    () => (agentModeUi ? extractCurrentTurnTodos(orderedMessages) : []),
+    [orderedMessages, agentModeUi],
+  );
+
+  const turns = useMemo(
+    () => splitMessagesIntoTurns(orderedMessages),
+    [orderedMessages],
+  );
+
+  const hasAgentActivity = useMemo(() => {
+    const last = turns[turns.length - 1];
+    return last ? turnHasAgentActivity(last.agent) : false;
+  }, [turns]);
+
+  const visibleMessages = useMemo(
+    () =>
+      orderedMessages.filter((m) => {
+        if (!isBubble(m)) return true;
+        return ((m.content as string) || "").trim().length > 0;
+      }),
+    [orderedMessages],
+  );
+
+  const lastReasoningId = useMemo(() => {
+    for (let i = orderedMessages.length - 1; i >= 0; i--) {
+      const m = orderedMessages[i];
+      if (m.role === "user" || (m as { kind?: string }).kind === "user") break;
+      if (m.kind === "reasoning") return m.id;
+    }
+    return null;
+  }, [orderedMessages]);
+
+  if (agentModeUi) {
+    const lastTurnIndex = turns.length - 1;
+    return (
+      <>
+        {turns.map((turn, turnIndex) => {
+          const isLastTurn = turnIndex === lastTurnIndex;
+          const isLive = isLoading && isLastTurn;
+          const phases = buildAgentTurnPhases(turn.agent);
+          const liveSteps = isLive ? buildAgentRunSteps(turn.agent) : [];
+          const hasReasoningRow = turn.agent.some(
+            (m) => m.kind === "reasoning" && (m.text || "").trim(),
+          );
+          const needsApproval =
+            !isLoading &&
+            isLastTurn &&
+            !!phases.result &&
+            APPROVAL_RE.test(phases.result);
+
+          const turnKey =
+            turn.user?.id ||
+            turn.agent[0]?.id ||
+            `turn-${turnIndex}`;
+
+          return (
+            <div key={turnKey} className="chat-paradigm-turn">
+              {turn.user && isBubble(turn.user) && turn.user.role === "user" && (
+                <DialogueBlock msg={turn.user} />
+              )}
+              {(turn.agent.length > 0 || isLive) && (
+                <div className="chat-transcript-block chat-transcript-block--agent">
+                  <AgentTurnView
+                    phases={phases}
+                    isLive={isLive}
+                    toolProgress={isLive ? toolProgress : null}
+                    toolProgressLog={isLive ? toolProgressLog : []}
+                    liveSteps={liveSteps}
+                    todos={isLive ? currentTodos : []}
+                    showThinkingPlaceholder={isLive && !hasReasoningRow}
+                    isLast={isLastTurn}
+                    needsApproval={needsApproval}
+                    streamStall={isLive ? streamStall : undefined}
+                    onAbort={onAbort}
+                    onApprove={onApprove}
+                    onDeny={onDeny}
+                  />
+                </div>
+              )}
+            </div>
+          );
+        })}
+        {isLoading && turns.length === 0 && (
+          <div className="chat-transcript-block chat-transcript-block--agent">
+            <AgentTurnView
+              phases={{ reasoning: "", execution: [], result: "" }}
+              isLive
+              toolProgress={toolProgress}
+              toolProgressLog={toolProgressLog}
+              liveSteps={[]}
+              todos={currentTodos}
+              showThinkingPlaceholder
+              isLast
+              streamStall={streamStall}
+              onAbort={onAbort}
+            />
+          </div>
+        )}
+      </>
+    );
+  }
 
   return (
     <>
@@ -76,6 +174,7 @@ export const MessageList = memo(function MessageList({
             <ReasoningRow
               key={msg.id}
               msg={msg as Extract<ChatMessage, { kind: "reasoning" }>}
+              defaultOpen={msg.id === lastReasoningId}
             />
           );
         }
@@ -84,6 +183,7 @@ export const MessageList = memo(function MessageList({
             <ToolCallRow
               key={msg.id}
               msg={msg as Extract<ChatMessage, { kind: "tool_call" }>}
+              defaultOpen={isLoading}
             />
           );
         }
@@ -95,7 +195,7 @@ export const MessageList = memo(function MessageList({
             />
           );
         }
-        const bubble = msg as Extract<ChatMessage, { role: "user" | "agent" }>;
+        const bubble = msg as ChatBubbleMessage;
         return (
           <MessageRow
             key={msg.id}
@@ -108,12 +208,15 @@ export const MessageList = memo(function MessageList({
         );
       })}
 
-      {isLoading && !lastMessageIsAgent && (
-        <TypingIndicator toolProgress={toolProgress} />
-      )}
-
-      {isLoading && toolProgress && lastMessageIsAgent && (
-        <div className="chat-tool-progress-inline">{toolProgress}</div>
+      {isLoading && !hasAgentActivity && (
+        <div className="chat-transcript-block chat-transcript-block--agent chat-transcript-activity">
+          <div className="chat-agent-activity-label">{t("chat.thinking")}</div>
+          <div className="chat-typing">
+            <span className="chat-typing-dot" />
+            <span className="chat-typing-dot" />
+            <span className="chat-typing-dot" />
+          </div>
+        </div>
       )}
     </>
   );

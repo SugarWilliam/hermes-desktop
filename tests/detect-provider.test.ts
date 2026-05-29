@@ -27,6 +27,13 @@ describe("detectProviderFromUrl", () => {
         "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
       ),
     ).toBe("qwen");
+    expect(detectProviderFromUrl("https://api.kimi.com/coding/v1")).toBe(
+      "kimi-coding",
+    );
+    expect(detectProviderFromUrl("https://api.moonshot.cn/v1")).toBe("kimi");
+    expect(detectProviderFromUrl("https://opencode.ai/zen/go/v1")).toBe(
+      "custom",
+    );
     expect(detectProviderFromUrl("https://api.minimax.chat/v1")).toBe(
       "minimax",
     );

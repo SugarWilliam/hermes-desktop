@@ -13,4 +13,10 @@ export default {
   kanban: "Kanban",
   gateway: "Gateway",
   settings: "Settings",
+  main: "Main navigation",
+  groupWorkspace: "Workspace",
+  groupAi: "Models & skills",
+  groupSystem: "System",
+  expandSidebar: "Expand sidebar",
+  collapseSidebar: "Collapse sidebar",
 } as const;

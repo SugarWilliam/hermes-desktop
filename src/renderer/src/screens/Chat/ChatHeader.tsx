@@ -1,5 +1,12 @@
 import { memo } from "react";
-import { Trash2 as Trash, Plus, Zap, FolderOpen, X } from "lucide-react";
+import {
+  Trash2 as Trash,
+  Plus,
+  Zap,
+  FolderOpen,
+  X,
+  PanelLeft,
+} from "lucide-react";
 import { useI18n } from "../../components/useI18n";
 import type { UsageState } from "./types";
 
@@ -7,6 +14,8 @@ interface ChatHeaderProps {
   sessionId: string | null;
   usage: UsageState | null;
   fastMode: boolean;
+  workspaceOpen: boolean;
+  onToggleWorkspace: () => void;
   hasMessages: boolean;
   /** Working folder bound to this conversation (issue #27), or null. */
   contextFolder: string | null;
@@ -46,6 +55,8 @@ export const ChatHeader = memo(function ChatHeader({
   sessionId,
   usage,
   fastMode,
+  workspaceOpen,
+  onToggleWorkspace,
   hasMessages,
   contextFolder,
   showContextFolder,
@@ -68,6 +79,17 @@ export const ChatHeader = memo(function ChatHeader({
         {usage && <UsageBadge usage={usage} />}
       </div>
       <div className="chat-header-actions">
+        {showContextFolder && (
+          <button
+            type="button"
+            className={`btn-ghost chat-workspace-toggle ${workspaceOpen ? "chat-workspace-toggle--active" : ""}`}
+            onClick={onToggleWorkspace}
+            title={t("chat.workspaceToggle")}
+            disabled={!contextFolder}
+          >
+            <PanelLeft size={14} />
+          </button>
+        )}
         {showContextFolder &&
           (contextFolder ? (
             <div className="chat-ctxfolder">

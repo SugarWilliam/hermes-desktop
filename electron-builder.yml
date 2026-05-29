@@ -13,6 +13,8 @@ asarUnpack:
   - resources/**
 win:
   executableName: hermes-agent
+  # Allow cross-compiling on Linux without Wine (rcedit / NSIS still need Wine for setup.exe).
+  signAndEditExecutable: false
   target:
     - nsis
     - portable

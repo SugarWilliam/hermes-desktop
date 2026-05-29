@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { ThemeProvider } from "./components/ThemeProvider";
+import { AppearanceProvider } from "./components/AppearanceProvider";
 import ErrorBoundary from "./components/ErrorBoundary";
 import Welcome from "./screens/Welcome/Welcome";
 import Install from "./screens/Install/Install";
@@ -189,14 +189,14 @@ function App(): React.JSX.Element {
   }
 
   return (
-    <ThemeProvider>
+    <AppearanceProvider>
       <ErrorBoundary>
         <div className="app">
           {isMac && <div className="drag-region" />}
           <div className="app-content">{renderScreen()}</div>
         </div>
       </ErrorBoundary>
-    </ThemeProvider>
+    </AppearanceProvider>
   );
 }
 

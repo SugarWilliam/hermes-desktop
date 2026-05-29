@@ -237,6 +237,7 @@ interface HermesAPI {
     history?: Array<{ role: string; content: string }>,
     attachments?: Attachment[],
     contextFolder?: string,
+    chatMode?: import("../shared/chatMode").ChatMode,
   ) => Promise<{ response: string; sessionId?: string }>;
   abortChat: () => Promise<void>;
   getApiServerKeyStatus: (profile?: string) => Promise<{ hasKey: boolean }>;
@@ -248,6 +249,37 @@ interface HermesAPI {
   onContextMenuSelectBubble: (
     callback: (point: { x: number; y: number }) => void,
   ) => () => void;
+  onContextMenuAddToChat: (callback: (text: string) => void) => () => void;
+  workspaceListDir: (
+    root: string,
+    relativePath?: string,
+  ) => Promise<Array<{ name: string; path: string; isDirectory: boolean }>>;
+  workspaceGitStatus: (
+    root: string,
+  ) => Promise<
+    Record<string, "modified" | "added" | "deleted" | "untracked">
+  >;
+  workspaceReadFile: (
+    root: string,
+    filePath: string,
+  ) => Promise<{ content: string; truncated: boolean }>;
+  readAttachmentFile: (
+    absPath: string,
+  ) => Promise<{ content: string; truncated: boolean; name: string }>;
+  workspaceWriteFile: (
+    root: string,
+    filePath: string,
+    content: string,
+  ) => Promise<boolean>;
+  workspacePickFiles: () => Promise<string[]>;
+  showPopupMenu: (
+    items: Array<{
+      id: string;
+      label: string;
+      enabled?: boolean;
+      type?: "separator";
+    }>,
+  ) => Promise<string | null>;
   readMediaFile: (filePath: string) => Promise<string | null>;
   saveMediaFile: (src: string, name: string) => Promise<boolean>;
   mediaFileExists: (filePath: string) => Promise<boolean>;
@@ -277,6 +309,7 @@ interface HermesAPI {
   }>;
   onChatChunk: (callback: (chunk: string) => void) => () => void;
   onChatReasoningChunk: (callback: (chunk: string) => void) => () => void;
+  onChatSessionId: (callback: (sessionId: string) => void) => () => void;
   onChatDone: (callback: (sessionId?: string) => void) => () => void;
   onChatToolProgress: (callback: (tool: string) => void) => () => void;
   onChatUsage: (
@@ -289,7 +322,9 @@ interface HermesAPI {
       rateLimitReset?: number;
     }) => void,
   ) => () => void;
-  onChatError: (callback: (error: string) => void) => () => void;
+  onChatError: (
+    callback: (payload: string | { error: string; sessionId?: string }) => void,
+  ) => () => void;
 
   // Gateway
   startGateway: () => Promise<boolean>;

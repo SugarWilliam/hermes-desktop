@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useTheme } from "../../components/ThemeProvider";
-import { THEME_OPTIONS } from "../../constants";
+import { AppearanceSettings } from "./AppearanceSettings";
 import { useI18n } from "../../components/useI18n";
 import { APP_LOCALES, type AppLocale } from "../../../../shared/i18n";
 import {
@@ -61,7 +60,6 @@ function getCachedOpenClaw(): { found: boolean; path: string | null } | null {
 function Settings({ profile }: { profile?: string }): React.JSX.Element {
   const { t, locale, setLocale } = useI18n();
   const [hermesHome, setHermesHome] = useState("");
-  const { theme, setTheme } = useTheme();
 
   // Hermes engine info — initialize from localStorage cache for instant display
   const [hermesVersion, setHermesVersion] = useState<string | null>(
@@ -871,29 +869,7 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
         <div className="settings-section-title">
           {t("settings.sections.appearance")}
         </div>
-        <div className="settings-field">
-          <label className="settings-field-label">
-            {t("settings.theme.label")}
-          </label>
-          <div className="settings-theme-options">
-            {THEME_OPTIONS.map((opt) => (
-              <button
-                key={opt.value}
-                className={`settings-theme-option ${theme === opt.value ? "active" : ""}`}
-                onClick={() => setTheme(opt.value)}
-              >
-                {opt.value === "system"
-                  ? t("settings.theme.system")
-                  : opt.value === "light"
-                    ? t("settings.theme.light")
-                    : t("settings.theme.dark")}
-              </button>
-            ))}
-          </div>
-          <div className="settings-field-hint">
-            {t("settings.appearanceHint")}
-          </div>
-        </div>
+        <AppearanceSettings />
         <div className="settings-field">
           <label className="settings-field-label">
             {t("settings.language.label")}

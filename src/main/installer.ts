@@ -299,6 +299,7 @@ const PROVIDER_ENV_KEYS: Record<string, string> = {
   minimax: "MINIMAX_API_KEY",
   glm: "GLM_API_KEY",
   kimi: "KIMI_API_KEY",
+  "kimi-coding": "KIMI_CODING_API_KEY",
   nvidia: "NVIDIA_API_KEY",
 };
 
@@ -317,6 +318,11 @@ const URL_TO_ENV_KEY: Array<[RegExp, string]> = [
   [/api\.cerebras\.ai/i, "CEREBRAS_API_KEY"],
   [/api\.mistral\.ai/i, "MISTRAL_API_KEY"],
   [/api\.perplexity\.ai/i, "PERPLEXITY_API_KEY"],
+  [/dashscope(-intl)?\.aliyuncs\.com/i, "QWEN_API_KEY"],
+  [/api\.moonshot\.(ai|cn)/i, "KIMI_API_KEY"],
+  [/api\.kimi\.com\/coding/i, "KIMI_CODING_API_KEY"],
+  [/opencode\.ai\/zen\/go/i, "OPENCODE_GO_API_KEY"],
+  [/opencode\.ai\/zen/i, "OPENCODE_ZEN_API_KEY"],
 ];
 
 /**

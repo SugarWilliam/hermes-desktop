@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { join } from "path";
-import { mkdirSync, rmSync, existsSync } from "fs";
+import { mkdirSync, rmSync, existsSync, readFileSync } from "fs";
 
 // vi.hoisted runs before module imports, so we can't reference imported
 // helpers here — use the bare Node modules via require.
@@ -196,7 +196,7 @@ vi.mock("better-sqlite3", () => {
 });
 
 import Database from "better-sqlite3";
-import { syncSessionCache } from "../src/main/session-cache";
+import { syncSessionCache, registerDesktopSession } from "../src/main/session-cache";
 
 const CACHE_FILE = join(TEST_HOME, "desktop", "sessions.json");
 const DB_PATH = join(TEST_HOME, "state.db");
@@ -517,4 +517,45 @@ describe("syncSessionCache", () => {
     expect(result.every((r) => r.messageCount === 2)).toBe(true);
     expect(elapsed).toBeLessThan(500);
   }, 30000);
+});
+
+describe("registerDesktopSession", () => {
+  it("adds a desktop session immediately with today's timestamp", () => {
+    const before = Math.floor(Date.now() / 1000);
+    registerDesktopSession({
+      id: "desk-today-1",
+      userMessage: "阅读这份文档内容然后评估其质量",
+      model: "gpt-5.4",
+      messageCount: 1,
+    });
+    const after = Math.floor(Date.now() / 1000);
+
+    const cached = JSON.parse(readFileSync(CACHE_FILE, "utf-8"));
+    expect(cached.sessions).toHaveLength(1);
+    expect(cached.sessions[0].id).toBe("desk-today-1");
+    expect(cached.sessions[0].source).toBe("desktop");
+    expect(cached.sessions[0].startedAt).toBeGreaterThanOrEqual(before);
+    expect(cached.sessions[0].startedAt).toBeLessThanOrEqual(after);
+    expect(cached.sessions[0].title).toContain("阅读这份文档");
+  });
+
+  it("updates message count when the same session sends again", () => {
+    registerDesktopSession({
+      id: "desk-resume",
+      userMessage: "hello",
+      messageCount: 1,
+    });
+    registerDesktopSession({
+      id: "desk-resume",
+      userMessage: "follow up",
+      messageCount: 3,
+    });
+
+    const cached = JSON.parse(readFileSync(CACHE_FILE, "utf-8"));
+    const row = cached.sessions.find(
+      (s: { id: string }) => s.id === "desk-resume",
+    );
+    expect(row.messageCount).toBe(3);
+    expect(row.title).toBe("hello");
+  });
 });

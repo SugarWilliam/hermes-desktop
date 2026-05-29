@@ -1,6 +1,14 @@
 import { ChildProcess, spawn } from "child_process";
 import { randomUUID } from "crypto";
 import { existsSync, readFileSync, appendFileSync, unlinkSync } from "fs";
+import {
+  type ChatMode,
+  chatModeCliPrefix,
+  chatModeSystemMessage,
+} from "../shared/chatMode";
+import { attachmentFocusDirective } from "../shared/attachmentContext";
+import { inlinePathRefAttachments } from "./inlinePathRefs";
+import { expandWorkspaceMessage } from "./expandWorkspaceMessage";
 import { join } from "path";
 import { homedir } from "os";
 import http from "http";
@@ -153,6 +161,9 @@ const OPENAI_COMPAT_PROVIDERS = new Set([
   "fireworks",
   "cerebras",
   "mistral",
+  "qwen",
+  "kimi",
+  "kimi-coding",
 ]);
 
 // Map base-URL patterns to the API key env var they need
@@ -168,6 +179,11 @@ const URL_KEY_MAP: Array<{ pattern: RegExp; envKey: string }> = [
   { pattern: /api\.cerebras\.ai/i, envKey: "CEREBRAS_API_KEY" },
   { pattern: /api\.mistral\.ai/i, envKey: "MISTRAL_API_KEY" },
   { pattern: /api\.perplexity\.ai/i, envKey: "PERPLEXITY_API_KEY" },
+  { pattern: /dashscope(-intl)?\.aliyuncs\.com/i, envKey: "QWEN_API_KEY" },
+  { pattern: /api\.moonshot\.(ai|cn)/i, envKey: "KIMI_API_KEY" },
+  { pattern: /api\.kimi\.com\/coding/i, envKey: "KIMI_CODING_API_KEY" },
+  { pattern: /opencode\.ai\/zen\/go/i, envKey: "OPENCODE_GO_API_KEY" },
+  { pattern: /opencode\.ai\/zen/i, envKey: "OPENCODE_ZEN_API_KEY" },
 ];
 
 interface ChatHandle {
@@ -262,6 +278,8 @@ export interface ChatCallbacks {
    *  live instead of waiting for a state-DB refresh on focus change
    *  (issue #352). */
   onReasoningChunk?: (text: string) => void;
+  /** Fired as soon as a session id is known (request header or CLI stdout). */
+  onSessionId?: (sessionId: string) => void;
   onDone: (sessionId?: string) => void;
   onError: (error: string) => void;
   onToolProgress?: (tool: string) => void;
@@ -311,6 +329,8 @@ export function buildUserContent(
   );
 
   const parts: string[] = [];
+  const focus = attachmentFocusDirective(attachments);
+  if (focus) parts.push(focus);
   if (text.trim()) parts.push(text);
   for (const f of textFiles) {
     if (typeof f.text !== "string") continue;
@@ -353,9 +373,10 @@ export function contextFolderSystemMessage(
     role: "system",
     content:
       `The working folder for this conversation is ${folder}. ` +
-      `When the user asks you to read, create, modify, or run project ` +
-      `files, use the file, terminal, and code-execution tools with ` +
-      `absolute paths under this folder.`,
+      `Project context files (AGENTS.md, .hermes.md, .cursor/rules/, skills/, mrag/) ` +
+      `live under this folder. When the user references @folder: with a project path, ` +
+      `use that project's files — do NOT substitute the global ~/.hermes/skills install. ` +
+      `Use file, terminal, and code-execution tools with absolute paths under the resolved folder.`,
   };
 }
 
@@ -367,6 +388,7 @@ function sendMessageViaApi(
   history?: Array<{ role: string; content: string }>,
   attachments?: Attachment[],
   contextFolder?: string,
+  chatMode: ChatMode = "chat",
 ): ChatHandle {
   const mc = getModelConfig(profile);
   const controller = new AbortController();
@@ -383,7 +405,11 @@ function sendMessageViaApi(
       });
     }
   }
-  const userContent = buildUserContent(message, attachments);
+  const expanded = expandWorkspaceMessage(message, contextFolder);
+  const userContent = buildUserContent(
+    expanded.message,
+    inlinePathRefAttachments(attachments),
+  );
   messages.push({ role: "user", content: userContent });
 
   // Context folder (issue #27): when the conversation is bound to a working
@@ -391,8 +417,13 @@ function sendMessageViaApi(
   // there. Injected only at the request-build step — the renderer's visible
   // transcript stays clean, and getSessionMessages filters non-user/assistant
   // roles, so reloaded sessions stay clean too.
+  const modeSystem = chatModeSystemMessage(chatMode);
+  if (modeSystem) messages.unshift(modeSystem);
   const ctxSystem = contextFolderSystemMessage(contextFolder);
   if (ctxSystem) messages.unshift(ctxSystem);
+  if (expanded.capabilitySystem) {
+    messages.unshift({ role: "system", content: expanded.capabilitySystem });
+  }
 
   const body = JSON.stringify({
     model: mc.model || "hermes-agent",
@@ -449,16 +480,55 @@ function sendMessageViaApi(
     _resumeSessionId || (hasAuth ? `desk-${Date.now()}-${randomUUID()}` : "");
   if (sessionId) {
     headers["X-Hermes-Session-Id"] = sessionId;
+    cb.onSessionId?.(sessionId);
+  }
+  const workspace = contextFolder?.trim();
+  if (workspace) {
+    headers["X-Hermes-Workspace"] = workspace;
   }
   let hasContent = false;
   let finished = false; // guard against double callbacks
   let lastError = ""; // capture embedded error messages
+  const streamStartedAt = Date.now();
+  const idleLimitMs =
+    chatMode === "agent" || chatMode === "plan" ? 600_000 : 120_000;
+  const wallLimitMs =
+    chatMode === "agent" || chatMode === "plan" ? 1_800_000 : 600_000;
+  let lastActivityAt = Date.now();
+
+  function touchActivity(): void {
+    lastActivityAt = Date.now();
+  }
+
+  const idleTimer = setInterval(() => {
+    if (finished) return;
+    const idleMs = Date.now() - lastActivityAt;
+    const wallMs = Date.now() - streamStartedAt;
+    if (idleMs >= idleLimitMs) {
+      controller.abort();
+      finish(
+        chatMode === "agent" || chatMode === "plan"
+          ? `Agent produced no output for ${Math.round(idleLimitMs / 60_000)} minutes. Check the gateway, model, and API key, then try again.`
+          : `Request timed out after ${Math.round(idleLimitMs / 60_000)} minutes with no response.`,
+      );
+    } else if (wallMs >= wallLimitMs) {
+      controller.abort();
+      finish(
+        `Request exceeded the ${Math.round(wallLimitMs / 60_000)} minute limit. Try a shorter prompt or cancel and retry.`,
+      );
+    }
+  }, 15_000);
+
+  function clearWatchdog(): void {
+    clearInterval(idleTimer);
+  }
   // Tool progress pattern: `emoji tool_name` or `emoji description`
   const toolProgressRe = /^`([^\s`]+)\s+([^`]+)`$/;
 
   function finish(error?: string): void {
     if (finished) return;
     finished = true;
+    clearWatchdog();
     console.log(
       "[hermes] finish called:",
       error ? `error=${error}` : "done",
@@ -518,6 +588,7 @@ function sendMessageViaApi(
 
   /** Handle a custom SSE event (non-data lines with `event:` prefix). */
   function processCustomEvent(eventType: string, data: string): void {
+    touchActivity();
     if (eventType === "hermes.tool.progress" && cb.onToolProgress) {
       try {
         const payload = JSON.parse(data);
@@ -573,6 +644,7 @@ function sendMessageViaApi(
       // diagnostic probe.
       const reasoningDelta = extractReasoningDelta(delta);
       if (reasoningDelta && cb.onReasoningChunk) {
+        touchActivity();
         cb.onReasoningChunk(reasoningDelta);
       }
 
@@ -581,9 +653,11 @@ function sendMessageViaApi(
         // Legacy: Detect tool progress lines injected into content: `🔍 search_web`
         const match = toolProgressRe.exec(content);
         if (match && cb.onToolProgress) {
+          touchActivity();
           cb.onToolProgress(`${match[1]} ${match[2]}`);
         } else {
           hasContent = true;
+          touchActivity();
           cb.onChunk(delta.content);
         }
       }
@@ -605,7 +679,10 @@ function sendMessageViaApi(
     },
     (res) => {
       const sid = res.headers["x-hermes-session-id"];
-      if (sid && typeof sid === "string") sessionId = sid;
+      if (sid && typeof sid === "string" && sid !== sessionId) {
+        sessionId = sid;
+        cb.onSessionId?.(sessionId);
+      }
 
       if (res.statusCode !== 200) {
         let errBody = "";
@@ -648,6 +725,7 @@ function sendMessageViaApi(
       }
 
       res.on("data", (chunk: Buffer) => {
+        touchActivity();
         buffer += chunk.toString();
         const parts = buffer.split("\n\n");
         buffer = parts.pop() || "";
@@ -711,7 +789,10 @@ function sendMessageViaCli(
   profile?: string,
   resumeSessionId?: string,
   attachments?: Attachment[],
+  chatMode: ChatMode = "chat",
 ): ChatHandle {
+  const prefix = chatModeCliPrefix(chatMode);
+  if (prefix) message = prefix + message;
   // CLI fallback can't pipe multimodal content; inline text-file attachments
   // and ignore images.  The gateway is the supported attachment path; this
   // is only hit when the API server isn't reachable.
@@ -774,6 +855,9 @@ function sendMessageViaCli(
     "PERPLEXITY_API_KEY",
     "GLM_API_KEY",
     "KIMI_API_KEY",
+    "KIMI_CODING_API_KEY",
+    "OPENCODE_ZEN_API_KEY",
+    "OPENCODE_GO_API_KEY",
     "MINIMAX_API_KEY",
     "MINIMAX_CN_API_KEY",
     "HF_TOKEN",
@@ -879,7 +963,10 @@ function sendMessageViaCli(
     outputBuffer += text;
 
     const sidMatch = outputBuffer.match(/session_id:\s*(\S+)/);
-    if (sidMatch) capturedSessionId = sidMatch[1];
+    if (sidMatch && sidMatch[1] !== capturedSessionId) {
+      capturedSessionId = sidMatch[1];
+      cb.onSessionId?.(capturedSessionId);
+    }
 
     const cleaned = text.replace(/session_id:\s*\S+\n?/g, "");
     const lines = cleaned.split("\n");
@@ -964,6 +1051,7 @@ export async function sendMessage(
   history?: Array<{ role: string; content: string }>,
   attachments?: Attachment[],
   contextFolder?: string,
+  chatMode: ChatMode = "chat",
 ): Promise<ChatHandle> {
   ensureInitialized();
 
@@ -977,6 +1065,7 @@ export async function sendMessage(
       history,
       attachments,
       contextFolder,
+      chatMode,
     );
   }
 
@@ -994,11 +1083,19 @@ export async function sendMessage(
       history,
       attachments,
       contextFolder,
+      chatMode,
     );
   }
 
   // Fallback to CLI
-  return sendMessageViaCli(message, cb, profile, resumeSessionId, attachments);
+  return sendMessageViaCli(
+    message,
+    cb,
+    profile,
+    resumeSessionId,
+    attachments,
+    chatMode,
+  );
 }
 
 // Lazy init — called on first sendMessage or gateway start

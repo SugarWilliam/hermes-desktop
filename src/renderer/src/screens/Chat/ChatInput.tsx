@@ -18,10 +18,38 @@ import {
   type AttachmentError,
 } from "./attachmentUtils";
 import { AttachmentChip } from "../../components/AttachmentChip";
-import type { Attachment } from "../../../../shared/attachments";
+import {
+  MAX_ATTACHMENTS_PER_MESSAGE,
+  isTextFile,
+  type Attachment,
+} from "../../../../shared/attachments";
+
+/** Must match `.chat-input` max-height in main.css */
+const CHAT_INPUT_MAX_HEIGHT_PX = 200;
+/** Must match `.chat-input` min-height in main.css */
+const CHAT_INPUT_MIN_HEIGHT_PX = 44;
+
+function resizeChatTextarea(el: HTMLTextAreaElement): void {
+  el.style.height = "auto";
+  el.style.overflowY = "hidden";
+  const contentHeight = el.scrollHeight;
+  const next = Math.min(
+    Math.max(contentHeight, CHAT_INPUT_MIN_HEIGHT_PX),
+    CHAT_INPUT_MAX_HEIGHT_PX,
+  );
+  el.style.height = `${next}px`;
+  el.style.overflowY =
+    contentHeight > CHAT_INPUT_MAX_HEIGHT_PX ? "auto" : "hidden";
+}
 
 export interface ChatInputHandle {
   setText(text: string): void;
+  /** Append quoted context (from workspace panel or context menu). */
+  appendText(text: string): void;
+  /** One-line @-reference (folder / selection) — no code body. */
+  appendReference(line: string): void;
+  /** Attach workspace or picked file by path (inlines text files). */
+  addPathRef(absolutePath: string): void;
   clear(): void;
   focus(): void;
   /** Add files from external sources (drop overlay).  Returns errors. */
@@ -31,6 +59,8 @@ export interface ChatInputHandle {
 interface ChatInputProps {
   isLoading: boolean;
   hasSession: boolean;
+  /** Layout session id — changes when user opens another saved chat. */
+  conversationKey?: string | null;
   sessionId?: string | null;
   remoteMode?: boolean;
   onSubmit: (text: string, attachments: Attachment[]) => void;
@@ -43,6 +73,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
     {
       isLoading,
       hasSession,
+      conversationKey,
       sessionId,
       remoteMode,
       onSubmit,
@@ -65,8 +96,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
     const autoResize = useCallback((): void => {
       const el = inputRef.current;
       if (!el) return;
-      el.style.height = "auto";
-      el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
+      resizeChatTextarea(el);
     }, []);
 
     const applyHistoryText = useCallback(
@@ -143,11 +173,86 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
             }
           });
         },
+        appendText(fragment: string): void {
+          setInput((prev) => {
+            const block = fragment.trim();
+            if (!block) return prev;
+            const sep = prev.trim() ? "\n\n" : "";
+            return `${prev}${sep}${block}\n`;
+          });
+          requestAnimationFrame(() => {
+            autoResize();
+            inputRef.current?.focus();
+          });
+        },
+        appendReference(line: string): void {
+          const ref = line.trim();
+          if (!ref) return;
+          setInput((prev) => {
+            const sep = prev.trim() ? " " : "";
+            return `${prev}${sep}${ref}`;
+          });
+          requestAnimationFrame(() => {
+            autoResize();
+            inputRef.current?.focus();
+          });
+        },
+        addPathRef(absolutePath: string): void {
+          const name =
+            absolutePath.split(/[\\/]/).filter(Boolean).pop() ||
+            absolutePath;
+          void (async (): Promise<void> => {
+            if (isTextFile("", name)) {
+              try {
+                const { content, truncated } =
+                  await window.hermesAPI.readAttachmentFile(absolutePath);
+                setAttachments((prev) => {
+                  if (prev.some((a) => a.path === absolutePath)) return prev;
+                  if (prev.length >= MAX_ATTACHMENTS_PER_MESSAGE) return prev;
+                  const att: Attachment = {
+                    id: `text-${Date.now()}-${prev.length}`,
+                    kind: "text-file",
+                    name,
+                    mime: name.endsWith(".md") ? "text/markdown" : "text/plain",
+                    size: content.length,
+                    text: truncated
+                      ? `${content}\n\n[File truncated for preview — full path: ${absolutePath}]`
+                      : content,
+                    path: absolutePath,
+                  };
+                  return [...prev, att];
+                });
+                setAttachmentError(null);
+                requestAnimationFrame(() => inputRef.current?.focus());
+                return;
+              } catch {
+                /* fall through to path-ref */
+              }
+            }
+            setAttachments((prev) => {
+              if (prev.some((a) => a.path === absolutePath)) return prev;
+              if (prev.length >= MAX_ATTACHMENTS_PER_MESSAGE) return prev;
+              const att: Attachment = {
+                id: `path-${Date.now()}-${prev.length}`,
+                kind: "path-ref",
+                name,
+                mime: "application/octet-stream",
+                size: 0,
+                path: absolutePath,
+              };
+              return [...prev, att];
+            });
+            setAttachmentError(null);
+            requestAnimationFrame(() => inputRef.current?.focus());
+          })();
+        },
         clear(): void {
           setInput("");
           setAttachments([]);
           setAttachmentError(null);
-          if (inputRef.current) inputRef.current.style.height = "auto";
+          requestAnimationFrame(() => {
+            if (inputRef.current) resizeChatTextarea(inputRef.current);
+          });
         },
         focus(): void {
           inputRef.current?.focus();
@@ -158,6 +263,21 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       }),
       [autoResize, ingestFiles],
     );
+
+    // Clear draft and attachments when switching to another saved session.
+    useEffect(() => {
+      setInput("");
+      setAttachments([]);
+      setAttachmentError(null);
+      requestAnimationFrame(() => {
+        if (inputRef.current) resizeChatTextarea(inputRef.current);
+      });
+    }, [conversationKey]);
+
+    // Keep height in sync when input is set programmatically (append, history, etc.)
+    useEffect(() => {
+      autoResize();
+    }, [input, autoResize]);
 
     // Refocus the textarea when a streaming response ends
     useEffect(() => {
@@ -204,7 +324,9 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       setInput("");
       setAttachments([]);
       setAttachmentError(null);
-      if (inputRef.current) inputRef.current.style.height = "auto";
+      requestAnimationFrame(() => {
+        if (inputRef.current) resizeChatTextarea(inputRef.current);
+      });
     }
 
     function handleSend(): void {
@@ -230,7 +352,9 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       // Local / info commands dispatch immediately — let parent route through onSubmit
       if (cmd.local || cmd.category === "info") {
         setInput("");
-        if (inputRef.current) inputRef.current.style.height = "auto";
+        requestAnimationFrame(() => {
+          if (inputRef.current) resizeChatTextarea(inputRef.current);
+        });
         onSubmit(cmd.name, []);
         return;
       }
@@ -245,11 +369,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       const value = e.target.value;
       setInput(value);
 
-      const target = e.target;
-      requestAnimationFrame(() => {
-        target.style.height = "auto";
-        target.style.height = `${Math.min(target.scrollHeight, 120)}px`;
-      });
+      requestAnimationFrame(() => resizeChatTextarea(e.target));
 
       if (value.startsWith("/") && !value.includes(" ")) {
         const query = value.split(" ")[0];

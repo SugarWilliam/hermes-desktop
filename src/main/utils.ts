@@ -111,15 +111,25 @@ export function getProcessImageNameWin(pid: number): string | null {
   if (process.platform !== "win32") return null;
   if (!pid || !Number.isFinite(pid)) return null;
   try {
+    // `tasklist.exe` is a console-subsystem binary — spawning it can flash a
+    // CMD window even with windowsHide (#342 follow-up). PowerShell with a
+    // hidden window avoids that.
     const output = execFileSync(
-      "tasklist",
-      ["/FI", `PID eq ${pid}`, "/FO", "CSV", "/NH"],
+      process.env.SystemRoot
+        ? join(process.env.SystemRoot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe")
+        : "powershell.exe",
+      [
+        "-NoProfile",
+        "-NonInteractive",
+        "-WindowStyle",
+        "Hidden",
+        "-Command",
+        `(Get-Process -Id ${pid} -ErrorAction SilentlyContinue).ProcessName`,
+      ],
       { encoding: "utf-8", timeout: 5000, windowsHide: true },
     );
-    // CSV row format: "image.exe","27652","Console","1","45,000 K"
-    // Returns "INFO: No tasks are running…" if the PID doesn't exist.
-    const m = output.match(/^"([^"]+)"/);
-    return m ? m[1] : null;
+    const name = output.trim().split(/\r?\n/).pop()?.trim();
+    return name ? `${name}.exe` : null;
   } catch {
     return null;
   }

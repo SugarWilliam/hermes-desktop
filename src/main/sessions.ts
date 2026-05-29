@@ -426,6 +426,18 @@ export function expandRowsToHistory(rows: RawMessageRow[]): HistoryItem[] {
         });
       }
 
+      for (const tc of parseToolCalls(r.tool_calls)) {
+        items.push({
+          kind: "tool_call",
+          id: r.id,
+          assistantId: r.id,
+          callId: tc.callId,
+          name: tc.name,
+          args: tc.args,
+          timestamp: r.timestamp,
+        });
+      }
+
       if (decoded.text || decoded.attachments.length > 0) {
         items.push({
           kind: "assistant",
@@ -438,17 +450,6 @@ export function expandRowsToHistory(rows: RawMessageRow[]): HistoryItem[] {
         });
       }
 
-      for (const tc of parseToolCalls(r.tool_calls)) {
-        items.push({
-          kind: "tool_call",
-          id: r.id,
-          assistantId: r.id,
-          callId: tc.callId,
-          name: tc.name,
-          args: tc.args,
-          timestamp: r.timestamp,
-        });
-      }
       continue;
     }
 

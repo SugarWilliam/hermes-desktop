@@ -1,17 +1,31 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createStreamGuard } from "./streamGuard";
+import {
+  CHAT_MODE_STORAGE_KEY,
+  isPlanReadyForApproval,
+  shouldSuggestPlanMode,
+  type ChatMode,
+} from "../../../../shared/chatMode";
 import { ChatInput, type ChatInputHandle } from "./ChatInput";
 import { ChatHeader } from "./ChatHeader";
+import { WorkspacePanel } from "./WorkspacePanel";
+import { ChatSplitResizer } from "./ChatSplitResizer";
+import { readChatPaneWidth } from "./chatPaneWidth";
 import { ChatEmptyState } from "./ChatEmptyState";
 import { MessageList } from "./MessageList";
 import { ModelPicker } from "./ModelPicker";
+import { ChatModeSelect } from "./ChatModeSelect";
 import { useChatScroll } from "./hooks/useChatScroll";
 import { useChatIPC } from "./hooks/useChatIPC";
+import { useLiveSessionSync } from "./hooks/useLiveSessionSync";
 import { useChatActions } from "./hooks/useChatActions";
+import { useStreamStall } from "./hooks/useStreamStall";
 import { useModelConfig } from "./hooks/useModelConfig";
 import { useFastMode } from "./hooks/useFastMode";
 import { useLocalCommands } from "./hooks/useLocalCommands";
 import { useI18n } from "../../components/useI18n";
 import { buildChatTranscript } from "./transcriptUtils";
+import { extractWorkspaceReferenceFromBlock } from "../../../../shared/workspaceContext";
 import type { Attachment } from "../../../../shared/attachments";
 import type { ChatMessage, UsageState } from "./types";
 
@@ -27,6 +41,7 @@ interface ChatProps {
   setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
   sessionId: string | null;
   profile?: string;
+  onSessionIdChange?: (sessionId: string) => void;
   onSessionStarted?: () => void;
   onNewChat?: () => void;
 }
@@ -36,6 +51,7 @@ function Chat({
   setMessages,
   sessionId,
   profile,
+  onSessionIdChange,
   onSessionStarted,
   onNewChat,
 }: ChatProps): React.JSX.Element {
@@ -43,16 +59,56 @@ function Chat({
   const [isLoading, setIsLoading] = useState(false);
   const [hermesSessionId, setHermesSessionId] = useState<string | null>(null);
   const [toolProgress, setToolProgress] = useState<string | null>(null);
+  const [toolProgressLog, setToolProgressLog] = useState<string[]>([]);
   const [usage, setUsage] = useState<UsageState | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const [remoteMode, setRemoteMode] = useState(false);
   // Working folder bound to this conversation (issue #27). Per-conversation,
   // held in memory; reset on session switch / new chat below.
   const [contextFolder, setContextFolder] = useState<string | null>(null);
+  const [chatMode, setChatMode] = useState<ChatMode>(() => {
+    try {
+      const stored = sessionStorage.getItem(CHAT_MODE_STORAGE_KEY);
+      if (stored === "chat" || stored === "agent" || stored === "plan") {
+        return stored;
+      }
+    } catch {
+      /* ignore */
+    }
+    return "chat";
+  });
+  const [planSuggestion, setPlanSuggestion] = useState<string | null>(null);
+  const [workspaceOpen, setWorkspaceOpen] = useState(false);
+  const [chatPaneWidth, setChatPaneWidth] = useState(readChatPaneWidth);
   const dragCounter = useRef(0);
   const chatInputRef = useRef<ChatInputHandle>(null);
   const queueRef = useRef<QueuedMessage[]>([]);
   const [queuedCount, setQueuedCount] = useState(0);
+  const hermesSessionIdRef = useRef<string | null>(null);
+
+  const streamGuard = useMemo(
+    () => createStreamGuard(() => hermesSessionIdRef.current),
+    [],
+  );
+
+  useEffect(() => {
+    hermesSessionIdRef.current = hermesSessionId;
+  }, [hermesSessionId]);
+
+  const bindSessionId = useCallback((id: string) => {
+    hermesSessionIdRef.current = id;
+  }, []);
+
+  const resetTransientChatState = useCallback(() => {
+    streamGuard.invalidate();
+    window.hermesAPI.abortChat();
+    setIsLoading(false);
+    setToolProgress(null);
+    setToolProgressLog([]);
+    setUsage(null);
+    setPlanSuggestion(null);
+    chatInputRef.current?.clear();
+  }, [streamGuard]);
 
   useEffect(() => {
     let cancelled = false;
@@ -77,9 +133,30 @@ function Chat({
     setMessages,
     setHermesSessionId,
     setToolProgress,
+    setToolProgressLog,
     setIsLoading,
     setUsage,
+    streamGuard,
   });
+
+  useLiveSessionSync({
+    isLoading,
+    sessionId: hermesSessionId,
+    chatMode,
+    setMessages,
+    streamGuard,
+  });
+
+  const streamStall = useStreamStall({
+    isLoading,
+    messages,
+    toolProgress,
+    toolProgressLog,
+  });
+
+  useEffect(() => {
+    if (hermesSessionId) onSessionIdChange?.(hermesSessionId);
+  }, [hermesSessionId, onSessionIdChange]);
 
   // Reset hermes session when the parent clears messages (new chat).
   // Effect-driven sync because `messages` is owned by the parent; a key-based
@@ -98,11 +175,19 @@ function Chat({
   // issue #276) and the per-conversation context folder (issue #27). Chat is
   // not remounted on session switch, so this must be done explicitly.
   useEffect(() => {
+    if (sessionId === hermesSessionIdRef.current) return;
+    // Parent caught up to a session we already claimed mid-stream — do not abort.
+    if (isLoading && sessionId && !hermesSessionIdRef.current) {
+      hermesSessionIdRef.current = sessionId;
+      setHermesSessionId(sessionId);
+      return;
+    }
+    resetTransientChatState();
     setHermesSessionId(sessionId);
     setContextFolder(null);
     queueRef.current = [];
     setQueuedCount(0);
-  }, [sessionId]);
+  }, [sessionId, resetTransientChatState, isLoading]);
 
   // Cmd/Ctrl+N → new chat
   useEffect(() => {
@@ -115,6 +200,23 @@ function Chat({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onNewChat]);
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(CHAT_MODE_STORAGE_KEY, chatMode);
+    } catch {
+      /* ignore */
+    }
+  }, [chatMode]);
+
+  // Auto-open workspace when a context folder is bound (Cursor / Qoder style).
+  useEffect(() => {
+    if (contextFolder && !remoteMode) {
+      setWorkspaceOpen(true);
+    } else if (!contextFolder) {
+      setWorkspaceOpen(false);
+    }
+  }, [contextFolder, remoteMode]);
 
   // "Copy entire chat" context-menu items (issue #298) — serialise the whole
   // conversation in the requested format and copy it. A ref keeps the latest
@@ -136,11 +238,24 @@ function Chat({
   // cursor — the user can then Copy that message.
   useEffect(() => {
     return window.hermesAPI.onContextMenuSelectBubble(({ x, y }) => {
-      const bubble = document.elementFromPoint(x, y)?.closest(".chat-bubble");
+      const bubble = document.elementFromPoint(x, y)?.closest(
+        ".chat-transcript-content, .chat-bubble",
+      );
       if (!bubble) return;
       const selection = window.getSelection();
       selection?.removeAllRanges();
       selection?.selectAllChildren(bubble);
+    });
+  }, []);
+
+  useEffect(() => {
+    return window.hermesAPI.onContextMenuAddToChat((text) => {
+      const ref = extractWorkspaceReferenceFromBlock(text);
+      if (ref) {
+        chatInputRef.current?.appendReference(ref);
+        return;
+      }
+      chatInputRef.current?.appendText(text);
     });
   }, []);
 
@@ -155,6 +270,7 @@ function Chat({
   );
 
   const handleClear = useCallback(() => {
+    streamGuard.invalidate();
     if (isLoading) {
       window.hermesAPI.abortChat();
       setIsLoading(false);
@@ -171,7 +287,7 @@ function Chat({
     setToolProgress(null);
     queueRef.current = [];
     setQueuedCount(0);
-  }, [isLoading, hermesSessionId, sessionId, setMessages]);
+  }, [isLoading, hermesSessionId, sessionId, setMessages, streamGuard]);
 
   const localCommands = useLocalCommands({
     profile,
@@ -185,6 +301,7 @@ function Chat({
   const actions = useChatActions({
     profile,
     hermesSessionId,
+    setHermesSessionId,
     messages,
     isLoading,
     setIsLoading,
@@ -193,6 +310,9 @@ function Chat({
     chatInputRef,
     localCommands,
     contextFolder,
+    chatMode,
+    streamGuard,
+    bindSessionId,
   });
 
   // Stable ref to handleSend so the drain effect doesn't re-trigger on
@@ -216,17 +336,62 @@ function Chat({
     });
   }, [isLoading]);
 
+  const handleAbort = useCallback(() => {
+    actions.handleAbort();
+    setToolProgress(null);
+    setToolProgressLog([]);
+  }, [actions]);
+
   const handleSubmitOrQueue = useCallback(
     (text: string, attachments: Attachment[]) => {
+      if (
+        chatMode !== "plan" &&
+        shouldSuggestPlanMode(text) &&
+        planSuggestion !== text
+      ) {
+        setPlanSuggestion(text);
+      } else if (planSuggestion && planSuggestion !== text) {
+        setPlanSuggestion(null);
+      }
       if (isLoading) {
         queueRef.current.push({ text, attachments });
         setQueuedCount(queueRef.current.length);
         return;
       }
+      setToolProgress(null);
+      setToolProgressLog([]);
       void handleSendRef.current(text, attachments);
     },
-    [isLoading],
+    [isLoading, chatMode, planSuggestion],
   );
+
+  const handleAddFileRef = useCallback((absolutePath: string) => {
+    chatInputRef.current?.addPathRef(absolutePath);
+    chatInputRef.current?.focus();
+  }, []);
+
+  const handleAppendReference = useCallback((line: string) => {
+    chatInputRef.current?.appendReference(line);
+    chatInputRef.current?.focus();
+  }, []);
+
+  const showWorkspace =
+    workspaceOpen && !!contextFolder && !remoteMode;
+
+  const planReadyForApproval = useMemo(
+    () => isPlanReadyForApproval(messages, isLoading, chatMode),
+    [messages, isLoading, chatMode],
+  );
+
+  const handlePlanApproveAndRun = useCallback(() => {
+    setChatMode("agent");
+    void handleSendRef.current(
+      t("chat.planApproveMessage"),
+      [],
+      true,
+      "agent",
+    );
+  }, [t]);
 
   const handleSuggestion = useCallback((text: string) => {
     chatInputRef.current?.setText(text);
@@ -292,7 +457,15 @@ function Chat({
 
   return (
     <div
+      className={`chat-layout ${showWorkspace ? "chat-layout--split" : ""}`}
+    >
+    <div
       className="chat-container"
+      style={
+        showWorkspace
+          ? { width: chatPaneWidth, flex: "0 0 auto" }
+          : undefined
+      }
       onDragEnter={handleDragEnter}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
@@ -302,6 +475,8 @@ function Chat({
         sessionId={sessionId}
         usage={usage}
         fastMode={fastMode}
+        workspaceOpen={workspaceOpen}
+        onToggleWorkspace={() => setWorkspaceOpen((o) => !o)}
         hasMessages={messages.length > 0}
         contextFolder={contextFolder}
         showContextFolder={!remoteMode}
@@ -312,6 +487,30 @@ function Chat({
         onClear={handleClear}
       />
 
+      {planSuggestion && chatMode !== "plan" && (
+        <div className="chat-plan-banner" role="status">
+          <span>{t("chat.planSuggest")}</span>
+          <button
+            type="button"
+            className="btn-ghost chat-plan-banner-btn"
+            onClick={() => {
+              setChatMode("plan");
+              setPlanSuggestion(null);
+            }}
+          >
+            {t("chat.planSwitch")}
+          </button>
+          <button
+            type="button"
+            className="btn-ghost chat-plan-banner-dismiss"
+            onClick={() => setPlanSuggestion(null)}
+            aria-label={t("chat.planDismiss")}
+          >
+            ×
+          </button>
+        </div>
+      )}
+
       <div className="chat-messages" ref={containerRef}>
         {messages.length === 0 ? (
           <ChatEmptyState onSelectSuggestion={handleSuggestion} />
@@ -320,12 +519,30 @@ function Chat({
             messages={messages}
             isLoading={isLoading}
             toolProgress={toolProgress}
+            toolProgressLog={toolProgressLog}
+            chatMode={chatMode}
+            streamStall={streamStall}
+            onAbort={handleAbort}
             onApprove={actions.handleApprove}
             onDeny={actions.handleDeny}
           />
         )}
         <div ref={bottomRef} />
       </div>
+
+      {planReadyForApproval && (
+        <div className="chat-plan-approve-bar" role="status">
+          <span>{t("chat.planApproveHint")}</span>
+          <button
+            type="button"
+            className="btn-primary chat-plan-approve-btn"
+            onClick={handlePlanApproveAndRun}
+            disabled={isLoading}
+          >
+            {t("chat.planApproveAndRun")}
+          </button>
+        </div>
+      )}
 
       {queuedCount > 0 && (
         <div className="chat-queue-indicator">
@@ -337,21 +554,31 @@ function Chat({
           ref={chatInputRef}
           isLoading={isLoading}
           hasSession={!!hermesSessionId}
+          conversationKey={sessionId}
           sessionId={hermesSessionId}
           remoteMode={remoteMode}
           onSubmit={handleSubmitOrQueue}
           onQuickAsk={actions.handleQuickAsk}
-          onAbort={actions.handleAbort}
+          onAbort={handleAbort}
         />
-        <ModelPicker
-          currentModel={modelConfig.currentModel}
-          currentProvider={modelConfig.currentProvider}
-          currentBaseUrl={modelConfig.currentBaseUrl}
-          modelGroups={modelConfig.modelGroups}
-          displayModel={modelConfig.displayModel}
-          onOpen={modelConfig.reload}
-          onSelectModel={modelConfig.selectModel}
-        />
+        <div className="chat-input-footer">
+          <ChatModeSelect
+            chatMode={chatMode}
+            onChatModeChange={(m) => {
+              setChatMode(m);
+              if (m === "plan") setPlanSuggestion(null);
+            }}
+          />
+          <ModelPicker
+            currentModel={modelConfig.currentModel}
+            currentProvider={modelConfig.currentProvider}
+            currentBaseUrl={modelConfig.currentBaseUrl}
+            modelGroups={modelConfig.modelGroups}
+            displayModel={modelConfig.displayModel}
+            onOpen={modelConfig.reload}
+            onSelectModel={modelConfig.selectModel}
+          />
+        </div>
       </div>
       {dragActive && (
         <div className="chat-drop-overlay" aria-hidden>
@@ -359,6 +586,20 @@ function Chat({
             {t("chat.dropToAttach")}
           </div>
         </div>
+      )}
+    </div>
+      {showWorkspace && (
+        <>
+          <ChatSplitResizer
+            width={chatPaneWidth}
+            onWidthChange={setChatPaneWidth}
+          />
+          <WorkspacePanel
+          root={contextFolder!}
+          onAddFileRef={handleAddFileRef}
+          onAppendReference={handleAppendReference}
+        />
+        </>
       )}
     </div>
   );

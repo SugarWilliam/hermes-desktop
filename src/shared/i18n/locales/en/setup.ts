@@ -3,6 +3,7 @@ export default {
   subtitle: "Choose a provider and configure it to get started",
   providerCards: {
     openrouter: { name: "OpenRouter", desc: "200+ models", tag: "Recommended" },
+    copilot: { name: "GitHub Copilot", desc: "GitHub device code / OAuth", tag: "Sign in" },
     anthropic: { name: "Anthropic", desc: "Claude models", tag: "" },
     openai: { name: "OpenAI", desc: "GPT models", tag: "" },
     local: {
@@ -34,6 +35,7 @@ export default {
   customApiKeyHint: "Required for remote APIs. Leave blank for localhost.",
   defaultModelHint: "Leave blank to use the server's default model",
   missingApiKey: "Please enter an API key",
+  missingOAuth: "Please complete OAuth sign-in first",
   missingServerUrl: "Please enter the server URL",
   saveFailed: "Failed to save configuration",
   noKeyHint: "Don't have a key? Get one here",
@@ -42,6 +44,13 @@ export default {
   apiKeyLabel: "{{provider}} API Key",
   noApiKeyRequired:
     "{{provider}} does not require an API key. Hermes will use your local CLI/OAuth configuration.",
+  oauthSignIn: "Sign in",
+  oauthSignInHint:
+    "Complete sign-in in the browser, or skip and configure later in Providers.",
+  oauthOptionalKey:
+    "API key (optional — or use Sign in below for OAuth)",
+  nousOptionalHint:
+    "Use a Nous Portal API key and/or OAuth. You can continue without either and sign in later.",
   localNoKeyNeeded: "No API key needed",
   localLlm: "Local LLM",
   modelBaseUrlPlaceholder: "http://localhost:1234/v1",

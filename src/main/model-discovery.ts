@@ -52,6 +52,7 @@ const NON_DISCOVERABLE_PROVIDERS = new Set<string>([
  *  sign-in surface (issue #367). */
 const OAUTH_DISCOVERY_PROVIDERS = new Set<string>([
   "openai-codex",
+  "copilot",
   "xai-oauth",
   "qwen-oauth",
   "google-gemini-cli",
@@ -88,6 +89,24 @@ const OAUTH_PROVIDER_CURATED: Record<string, string[]> = {
   ],
   "minimax-oauth": ["MiniMax-M2.7", "MiniMax-M2.7-highspeed"],
   "qwen-oauth": [],
+  copilot: [
+    "gpt-5.4",
+    "gpt-5.4-mini",
+    "gpt-5-mini",
+    "gpt-5.3-codex",
+    "gpt-5.2-codex",
+    "gpt-4.1",
+    "gpt-4o",
+    "gpt-4o-mini",
+    "claude-sonnet-4.6",
+    "claude-sonnet-4",
+    "claude-sonnet-4.5",
+    "claude-haiku-4.5",
+    "gemini-3.1-pro-preview",
+    "gemini-3-pro-preview",
+    "gemini-3-flash-preview",
+    "gemini-2.5-pro",
+  ],
 };
 
 // One-liner that prints hermes-agent's model list for a provider as a

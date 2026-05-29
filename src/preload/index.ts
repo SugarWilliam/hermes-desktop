@@ -228,6 +228,7 @@ const hermesAPI = {
     history?: Array<{ role: string; content: string }>,
     attachments?: Attachment[],
     contextFolder?: string,
+    chatMode?: import("../shared/chatMode").ChatMode,
   ): Promise<{ response: string; sessionId?: string }> =>
     ipcRenderer.invoke(
       "send-message",
@@ -237,6 +238,7 @@ const hermesAPI = {
       history,
       attachments,
       contextFolder,
+      chatMode,
     ),
 
   abortChat: (): Promise<void> => ipcRenderer.invoke("abort-chat"),
@@ -325,6 +327,15 @@ const hermesAPI = {
     return () => ipcRenderer.removeListener("chat-reasoning-chunk", handler);
   },
 
+  onChatSessionId: (callback: (sessionId: string) => void): (() => void) => {
+    const handler = (
+      _event: Electron.IpcRendererEvent,
+      sessionId: string,
+    ): void => callback(sessionId);
+    ipcRenderer.on("chat-session-id", handler);
+    return () => ipcRenderer.removeListener("chat-session-id", handler);
+  },
+
   onChatDone: (callback: (sessionId?: string) => void): (() => void) => {
     const handler = (
       _event: Electron.IpcRendererEvent,
@@ -356,6 +367,59 @@ const hermesAPI = {
     return () =>
       ipcRenderer.removeListener("context-menu-select-bubble", handler);
   },
+
+  onContextMenuAddToChat: (callback: (text: string) => void): (() => void) => {
+    const handler = (
+      _event: Electron.IpcRendererEvent,
+      text: string,
+    ): void => callback(text);
+    ipcRenderer.on("context-menu-add-to-chat", handler);
+    return () =>
+      ipcRenderer.removeListener("context-menu-add-to-chat", handler);
+  },
+
+  workspaceListDir: (
+    root: string,
+    relativePath?: string,
+  ): Promise<
+    Array<{ name: string; path: string; isDirectory: boolean }>
+  > => ipcRenderer.invoke("workspace-list-dir", root, relativePath),
+
+  workspaceGitStatus: (
+    root: string,
+  ): Promise<
+    Record<string, "modified" | "added" | "deleted" | "untracked">
+  > => ipcRenderer.invoke("workspace-git-status", root),
+
+  workspaceReadFile: (
+    root: string,
+    filePath: string,
+  ): Promise<{ content: string; truncated: boolean }> =>
+    ipcRenderer.invoke("workspace-read-file", root, filePath),
+
+  readAttachmentFile: (
+    absPath: string,
+  ): Promise<{ content: string; truncated: boolean; name: string }> =>
+    ipcRenderer.invoke("read-attachment-file", absPath),
+
+  workspaceWriteFile: (
+    root: string,
+    filePath: string,
+    content: string,
+  ): Promise<boolean> =>
+    ipcRenderer.invoke("workspace-write-file", root, filePath, content),
+
+  workspacePickFiles: (): Promise<string[]> =>
+    ipcRenderer.invoke("workspace-pick-files"),
+
+  showPopupMenu: (
+    items: Array<{
+      id: string;
+      label: string;
+      enabled?: boolean;
+      type?: "separator";
+    }>,
+  ): Promise<string | null> => ipcRenderer.invoke("show-popup-menu", items),
 
   onChatToolProgress: (callback: (tool: string) => void): (() => void) => {
     const handler = (_event: Electron.IpcRendererEvent, tool: string): void =>
@@ -389,9 +453,13 @@ const hermesAPI = {
     return () => ipcRenderer.removeListener("chat-usage", handler);
   },
 
-  onChatError: (callback: (error: string) => void): (() => void) => {
-    const handler = (_event: Electron.IpcRendererEvent, error: string): void =>
-      callback(error);
+  onChatError: (
+    callback: (payload: string | { error: string; sessionId?: string }) => void,
+  ): (() => void) => {
+    const handler = (
+      _event: Electron.IpcRendererEvent,
+      payload: string | { error: string; sessionId?: string },
+    ): void => callback(payload);
     ipcRenderer.on("chat-error", handler);
     return () => ipcRenderer.removeListener("chat-error", handler);
   },

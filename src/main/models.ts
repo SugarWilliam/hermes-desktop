@@ -4,6 +4,8 @@ import { randomUUID } from "crypto";
 import { HERMES_HOME } from "./installer";
 import { safeWriteFile, profilePaths } from "./utils";
 import DEFAULT_MODELS from "./default-models";
+import { copilotDefaultModels } from "./copilot-models";
+import { ensureDefaultActiveModel } from "./default-provider-setup";
 
 const MODELS_FILE = join(HERMES_HOME, "models.json");
 
@@ -136,12 +138,46 @@ function seedDefaults(profile?: string): SavedModel[] {
     console.error("Failed to load custom providers:", e);
   }
   writeModels(models);
+  try {
+    ensureCopilotModelsInLibrary();
+    ensureDefaultActiveModel(profile);
+  } catch {
+    /* non-fatal */
+  }
   return models;
+}
+
+/** Merge GitHub Copilot catalog entries into models.json (idempotent). */
+export function ensureCopilotModelsInLibrary(): void {
+  const models = existsSync(MODELS_FILE) ? readModels() : [];
+  const existing = new Set(
+    models.filter((m) => m.provider === "copilot").map((m) => m.model),
+  );
+  let changed = false;
+  for (const d of copilotDefaultModels()) {
+    if (existing.has(d.model)) continue;
+    models.push({
+      id: randomUUID(),
+      name: d.name,
+      provider: d.provider,
+      model: d.model,
+      baseUrl: d.baseUrl,
+      createdAt: Date.now(),
+    });
+    changed = true;
+  }
+  if (changed) writeModels(models);
 }
 
 export function listModels(): SavedModel[] {
   if (!existsSync(MODELS_FILE)) {
     return seedDefaults();
+  }
+  try {
+    ensureCopilotModelsInLibrary();
+    ensureDefaultActiveModel();
+  } catch {
+    /* non-fatal */
   }
   return readModels();
 }

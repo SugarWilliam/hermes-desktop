@@ -1,6 +1,40 @@
 import type { Attachment } from "../../../../shared/attachments";
 import type { ChatMessage, ChatBubbleMessage } from "./types";
 
+/** User/agent bubbles eligible for the OpenAI `messages` history payload. */
+export function isHistoryBubble(
+  msg: ChatMessage,
+): msg is ChatBubbleMessage {
+  return (
+    msg.kind === "user" ||
+    msg.kind === "assistant" ||
+    (!msg.kind && (msg.role === "user" || msg.role === "agent"))
+  );
+}
+
+/** Renderer-only error rows must not be forwarded as assistant context. */
+export function isErrorBubble(msg: ChatMessage): boolean {
+  if (!isHistoryBubble(msg) || msg.role !== "agent") return false;
+  const content = msg.content || "";
+  return msg.id.startsWith("error-") || content.startsWith("Error:");
+}
+
+/**
+ * Build the text-only history array forwarded to the gateway before the
+ * current user turn. Excludes tool/reasoning rows and synthetic errors.
+ */
+export function buildAgentHistoryPayload(
+  messages: ReadonlyArray<ChatMessage>,
+): Array<{ role: string; content: string }> {
+  return messages
+    .filter(isHistoryBubble)
+    .filter((m) => !isErrorBubble(m))
+    .map((m) => ({
+      role: m.role,
+      content: m.content,
+    }));
+}
+
 /**
  * Shape of one row from the main process's `getSessionMessages` IPC.
  * Mirrors `src/main/sessions.ts:HistoryItem` (kept loose here so the

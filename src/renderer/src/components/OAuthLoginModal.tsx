@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
+import { detectDeviceCode } from "../../../shared/deviceCode";
 import { X } from "../assets/icons";
 import { useI18n } from "./useI18n";
 
@@ -7,21 +8,24 @@ interface OAuthLoginModalProps {
   providerLabel: string;
   profile?: string;
   onClose: () => void;
+  /** Called once when OAuth completes successfully (before the user closes). */
+  onSuccess?: (providerId: string) => void | Promise<void>;
 }
 
 type Status = "running" | "success" | "error";
 
 /**
  * Drives an interactive OAuth sign-in for a subscription provider.
- * Spawns `hermes auth add <provider> --type oauth` in the main process,
- * streams the CLI output here, and reports success/failure. The CLI
- * opens the system browser for the consent step.
+ * Runs provider OAuth in the main process (browser or device-code flow).
+ * Copilot uses a direct Python login; other providers use the bundled
+ * Hermes CLI or credential pool — no allowlist in the desktop UI.
  */
 function OAuthLoginModal({
   provider,
   providerLabel,
   profile,
   onClose,
+  onSuccess,
 }: OAuthLoginModalProps): React.JSX.Element {
   const { t } = useI18n();
   const [log, setLog] = useState("");
@@ -32,6 +36,8 @@ function OAuthLoginModal({
   // StrictMode (dev) double-invokes effects, so guard against firing a
   // second `oauthLogin` that would just bounce off that guard.
   const startedRef = useRef(false);
+  const successHandledRef = useRef(false);
+  const device = useMemo(() => detectDeviceCode(log), [log]);
 
   useEffect(() => {
     const cleanup = window.hermesAPI.onOAuthLoginProgress((chunk) => {
@@ -56,6 +62,12 @@ function OAuthLoginModal({
     }
     return cleanup;
   }, [provider, profile, t]);
+
+  useEffect(() => {
+    if (status !== "success" || !onSuccess || successHandledRef.current) return;
+    successHandledRef.current = true;
+    void Promise.resolve(onSuccess(provider));
+  }, [status, onSuccess, provider]);
 
   // Keep the streamed log scrolled to the newest line.
   useEffect(() => {
@@ -93,6 +105,40 @@ function OAuthLoginModal({
             <p className="oauth-login-status">
               {t("providers.oauth.runningHint")}
             </p>
+          )}
+          {status === "running" && device && (
+            <div className="oauth-device-prompt">
+              <p className="oauth-device-prompt-label">
+                {t("providers.oauth.deviceHint")}
+              </p>
+              <p>
+                <span className="oauth-device-prompt-key">
+                  {t("providers.oauth.deviceLink")}
+                </span>
+                <button
+                  type="button"
+                  className="oauth-device-link btn-ghost"
+                  onClick={() => void window.hermesAPI.openExternal(device.url)}
+                >
+                  {device.url}
+                </button>
+              </p>
+              <p>
+                <span className="oauth-device-prompt-key">
+                  {t("providers.oauth.deviceCode")}
+                </span>
+                <code className="oauth-device-code">{device.code}</code>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm oauth-device-copy"
+                  onClick={() =>
+                    void window.hermesAPI.copyToClipboard(device.code)
+                  }
+                >
+                  {t("providers.oauth.deviceCopy")}
+                </button>
+              </p>
+            </div>
           )}
           {status === "success" && (
             <div className="oauth-login-result oauth-login-result-success">

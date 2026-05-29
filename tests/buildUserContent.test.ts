@@ -157,8 +157,10 @@ describe("buildUserContent", () => {
       textFile("notes.md", "# title\nbody", "text/markdown"),
     ]);
     expect(typeof result).toBe("string");
-    expect(result).toBe(
-      'explain\n\n<file name="notes.md" mime="text/markdown">\n# title\nbody\n</file>',
+    expect(result).toContain("explain");
+    expect(result).toMatch(/IMPORTANT:/);
+    expect(result).toContain(
+      '<file name="notes.md" mime="text/markdown">\n# title\nbody\n</file>',
     );
   });
 
@@ -173,10 +175,11 @@ describe("buildUserContent", () => {
       text?: string;
       image_url?: { url: string };
     }>;
-    expect(arr[0]).toEqual({
-      type: "text",
-      text: 'describe\n\n<file name="notes.md" mime="text/markdown">\nbody\n</file>',
-    });
+    expect(arr[0].type).toBe("text");
+    expect(arr[0].text).toContain("describe");
+    expect(arr[0].text).toContain(
+      '<file name="notes.md" mime="text/markdown">\nbody\n</file>',
+    );
     expect(arr[1]).toEqual({
       type: "image_url",
       image_url: { url: "data:image/png;base64,AAA=" },
@@ -244,8 +247,10 @@ describe("buildUserContent", () => {
       ),
     ]);
     expect(typeof result).toBe("string");
-    expect(result).toBe(
-      "summarize this\n\n[Attached file: C:/Users/pmos6/Downloads/report.pdf]",
+    expect(result).toContain("IMPORTANT:");
+    expect(result).toContain("summarize this");
+    expect(result).toContain(
+      "[Attached file: C:/Users/pmos6/Downloads/report.pdf]",
     );
   });
 
@@ -258,9 +263,9 @@ describe("buildUserContent", () => {
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
       ),
     ]);
-    expect(result).toBe(
-      "compare these\n\n[Attached file: /tmp/a.pdf]\n[Attached file: /tmp/b.docx]",
-    );
+    expect(result).toContain("compare these");
+    expect(result).toContain("[Attached file: /tmp/a.pdf]");
+    expect(result).toContain("[Attached file: /tmp/b.docx]");
   });
 
   it("path-refs combine with text-file wrappers and images in the right order", () => {
@@ -296,6 +301,7 @@ describe("buildUserContent", () => {
     const result = buildUserContent("", [
       pathRef("a.pdf", "/tmp/a.pdf", "application/pdf"),
     ]);
-    expect(result).toBe("[Attached file: /tmp/a.pdf]");
+    expect(result).toContain("[Attached file: /tmp/a.pdf]");
+    expect(result).toMatch(/IMPORTANT:/);
   });
 });

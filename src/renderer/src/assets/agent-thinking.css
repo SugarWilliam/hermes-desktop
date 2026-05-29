@@ -1,0 +1,127 @@
+/* Cursor-style thinking / reasoning trace */
+
+.thinking-view {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-family: var(--font-agent, "Courier New", Consolas, monospace);
+}
+
+.thinking-meta {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.thinking-prose {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.thinking-prose .agent-markdown {
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.thinking-code-block {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: #1a1214;
+}
+
+.thinking-code-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 10px;
+  background: rgba(0, 0, 0, 0.35);
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+}
+
+.thinking-code-file {
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.thinking-code-stats {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.thinking-stat--add {
+  color: #4ade80;
+}
+
+.thinking-stat--del {
+  color: #f87171;
+}
+
+.thinking-code-body {
+  background: #1a1214;
+}
+
+.thinking-code-fallback {
+  margin: 0;
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.5;
+  font-family: var(--font-mono);
+  color: #ececec;
+  overflow-x: auto;
+}
+
+/* Prism — Cursor thinking palette (gold selectors, blue props, pink values) */
+.thinking-code-block .token.selector,
+.thinking-code-block .token.tag,
+.thinking-code-block .token.attr-name,
+.thinking-code-block .token.property,
+.thinking-code-block .token.key,
+.thinking-code-block .token.class-name {
+  color: #e6c07b;
+}
+
+.thinking-code-block .token.punctuation,
+.thinking-code-block .token.operator {
+  color: #abb2bf;
+}
+
+.thinking-code-block .token.property {
+  color: #9cdcfe;
+}
+
+.thinking-code-block .token.string,
+.thinking-code-block .token.attr-value,
+.thinking-code-block .token.number,
+.thinking-code-block .token.unit {
+  color: #f0a8c0;
+}
+
+.thinking-code-block .token.comment {
+  color: #6a737d;
+  font-style: italic;
+}
+
+.thinking-code-block .token.function {
+  color: #c678dd;
+}
+
+.thinking-code-block .token.keyword {
+  color: #c678dd;
+}
+
+.thinking-code-block .token.deleted {
+  color: #f87171;
+}
+
+.thinking-code-block .token.inserted {
+  color: #4ade80;
+}

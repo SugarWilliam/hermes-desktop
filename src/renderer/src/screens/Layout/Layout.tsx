@@ -19,59 +19,16 @@ import Schedules from "../Schedules/Schedules";
 import Kanban from "../Kanban/Kanban";
 import RemoteNotice from "../../components/RemoteNotice";
 import VerifyWarningBanner from "../../components/VerifyWarningBanner";
-import hermeslogo from "../../assets/hermes.png";
-import {
-  ChatBubble,
-  Clock,
-  Users,
-  Settings as SettingsIcon,
-  Puzzle,
-  Sparkles,
-  Brain,
-  Wrench,
-  Signal,
-  Building,
-  Layers,
-  KeyRound,
-  Timer,
-  Kanban as KanbanIcon,
-  Download,
-} from "../../assets/icons";
-import type { LucideIcon } from "lucide-react";
+import { Download, PanelLeft, PanelLeftClose } from "../../assets/icons";
 import { useI18n } from "../../components/useI18n";
+import {
+  NAV_GROUPS,
+  readSidebarExpanded,
+  SIDEBAR_EXPANDED_KEY,
+  type NavView,
+} from "./sidebarNav";
 
-type View =
-  | "chat"
-  | "sessions"
-  | "agents"
-  | "office"
-  | "models"
-  | "providers"
-  | "skills"
-  | "soul"
-  | "memory"
-  | "tools"
-  | "schedules"
-  | "kanban"
-  | "gateway"
-  | "settings";
-
-const NAV_ITEMS: { view: View; icon: LucideIcon; labelKey: string }[] = [
-  { view: "chat", icon: ChatBubble, labelKey: "navigation.chat" },
-  { view: "sessions", icon: Clock, labelKey: "navigation.sessions" },
-  { view: "agents", icon: Users, labelKey: "navigation.agents" },
-  { view: "office", icon: Building, labelKey: "navigation.office" },
-  { view: "kanban", icon: KanbanIcon, labelKey: "navigation.kanban" },
-  { view: "models", icon: Layers, labelKey: "navigation.models" },
-  { view: "providers", icon: KeyRound, labelKey: "navigation.providers" },
-  { view: "skills", icon: Puzzle, labelKey: "navigation.skills" },
-  { view: "soul", icon: Sparkles, labelKey: "navigation.soul" },
-  { view: "memory", icon: Brain, labelKey: "navigation.memory" },
-  { view: "tools", icon: Wrench, labelKey: "navigation.tools" },
-  { view: "schedules", icon: Timer, labelKey: "navigation.schedules" },
-  { view: "gateway", icon: Signal, labelKey: "navigation.gateway" },
-  { view: "settings", icon: SettingsIcon, labelKey: "navigation.settings" },
-];
+type View = NavView;
 
 interface LayoutProps {
   verifyWarning?: boolean;
@@ -95,6 +52,7 @@ function Layout({
     () => new Set<View>(["chat"]),
   );
   // Remote-only mode — SSH tunnel has full access; only pure HTTP remote mode restricts screens
+  const [sidebarExpanded, setSidebarExpanded] = useState(readSidebarExpanded);
   const [remoteMode, setRemoteMode] = useState(false);
 
   const paneStyle = (target: View): React.CSSProperties => ({
@@ -191,6 +149,7 @@ function Layout({
   }, [handleNewChat, goTo]);
 
   const handleSelectProfile = useCallback((name: string) => {
+    window.hermesAPI.abortChat();
     setActiveProfile(name);
     setMessages([]);
     setCurrentSessionId(null);
@@ -198,6 +157,7 @@ function Layout({
 
   const handleResumeSession = useCallback(
     async (sessionId: string) => {
+      window.hermesAPI.abortChat();
       const items = (await window.hermesAPI.getSessionMessages(
         sessionId,
       )) as DbHistoryItem[];
@@ -208,23 +168,73 @@ function Layout({
     [goTo],
   );
 
+  const toggleSidebar = useCallback(() => {
+    setSidebarExpanded((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(SIDEBAR_EXPANDED_KEY, next ? "1" : "0");
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  }, []);
+
   return (
     <div className="layout">
-      <aside className="sidebar">
+      <aside
+        className={`sidebar ${sidebarExpanded ? "sidebar--expanded" : "sidebar--collapsed"}`}
+      >
         <div className="sidebar-brand">
-          <img src={hermeslogo} height={30} alt="" />
+          <button
+            type="button"
+            className="sidebar-toggle"
+            onClick={toggleSidebar}
+            aria-label={t(
+              sidebarExpanded
+                ? "navigation.collapseSidebar"
+                : "navigation.expandSidebar",
+            )}
+            title={t(
+              sidebarExpanded
+                ? "navigation.collapseSidebar"
+                : "navigation.expandSidebar",
+            )}
+          >
+            {sidebarExpanded ? (
+              <PanelLeftClose size={18} />
+            ) : (
+              <PanelLeft size={18} />
+            )}
+          </button>
+          {sidebarExpanded && (
+            <span className="sidebar-brand-name">{t("common.appName")}</span>
+          )}
         </div>
 
-        <nav className="sidebar-nav">
-          {NAV_ITEMS.map(({ view: v, icon: Icon, labelKey }) => (
-            <button
-              key={v}
-              className={`sidebar-nav-item ${view === v ? "active" : ""}`}
-              onClick={() => goTo(v)}
-            >
-              <Icon size={16} />
-              {t(labelKey)}
-            </button>
+        <nav className="sidebar-nav" aria-label={t("navigation.main")}>
+          {NAV_GROUPS.map((group, gi) => (
+            <div key={group.id} className="sidebar-nav-group">
+              {gi > 0 && <div className="sidebar-nav-divider" aria-hidden />}
+              {sidebarExpanded && group.labelKey && (
+                <div className="sidebar-nav-group-label">{t(group.labelKey)}</div>
+              )}
+              {group.items.map(({ view: v, icon: Icon, labelKey }) => (
+                <button
+                  key={v}
+                  type="button"
+                  className={`sidebar-nav-item ${view === v ? "active" : ""}`}
+                  onClick={() => goTo(v)}
+                  title={t(labelKey)}
+                  aria-label={t(labelKey)}
+                >
+                  <Icon size={18} />
+                  {sidebarExpanded && (
+                    <span className="sidebar-nav-label">{t(labelKey)}</span>
+                  )}
+                </button>
+              ))}
+            </div>
           ))}
         </nav>
 
@@ -239,27 +249,35 @@ function Layout({
               title={updateError ?? undefined}
             >
               <Download size={13} />
-              {updateState === "available" && (
-                <span>
-                  {t("common.updateAvailable", { version: updateVersion })}
-                </span>
-              )}
-              {updateState === "downloading" && (
-                <span>
-                  {t("common.downloading", { percent: downloadPercent })}
-                </span>
-              )}
-              {updateState === "ready" && (
-                <span>{t("common.restartToUpdate")}</span>
-              )}
-              {updateState === "error" && (
-                <span>{t("common.updateFailed")}</span>
+              {sidebarExpanded && (
+                <>
+                  {updateState === "available" && (
+                    <span>
+                      {t("common.updateAvailable", { version: updateVersion })}
+                    </span>
+                  )}
+                  {updateState === "downloading" && (
+                    <span>
+                      {t("common.downloading", { percent: downloadPercent })}
+                    </span>
+                  )}
+                  {updateState === "ready" && (
+                    <span>{t("common.restartToUpdate")}</span>
+                  )}
+                  {updateState === "error" && (
+                    <span>{t("common.updateFailed")}</span>
+                  )}
+                </>
               )}
             </button>
           )}
-          <div className="sidebar-footer-text">
-            {activeProfile === "default" ? t("common.appName") : activeProfile}
-          </div>
+          {sidebarExpanded && (
+            <div className="sidebar-footer-text">
+              {activeProfile === "default"
+                ? t("common.appName")
+                : activeProfile}
+            </div>
+          )}
         </div>
       </aside>
 
@@ -276,6 +294,7 @@ function Layout({
             setMessages={setMessages}
             sessionId={currentSessionId}
             profile={activeProfile}
+            onSessionIdChange={setCurrentSessionId}
             onNewChat={handleNewChat}
           />
         </div>

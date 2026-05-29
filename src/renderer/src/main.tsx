@@ -1,4 +1,8 @@
 import "./assets/main.css";
+import "./assets/agent-markdown.css";
+import "./assets/agent-thinking.css";
+import "./assets/appearance-themes.css";
+import "./assets/agent-paradigm.css";
 
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";

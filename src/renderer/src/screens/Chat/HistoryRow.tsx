@@ -1,7 +1,7 @@
-import { memo, useState } from "react";
+import { memo, useEffect, useState } from "react";
+import { ThinkingView } from "./ThinkingView";
 import { useI18n } from "../../components/useI18n";
 import { AttachmentChip } from "../../components/AttachmentChip";
-import { HermesAvatar } from "./MessageRow";
 import type {
   Attachment,
   ReasoningMessage,
@@ -42,6 +42,9 @@ const CollapsibleSection = memo(function CollapsibleSection({
   children,
 }: CollapsibleSectionProps): React.JSX.Element {
   const [open, setOpen] = useState(defaultOpen);
+  useEffect(() => {
+    if (defaultOpen) setOpen(true);
+  }, [defaultOpen]);
   return (
     <details
       className={`chat-history chat-history--${variant}`}
@@ -61,16 +64,18 @@ const CollapsibleSection = memo(function CollapsibleSection({
 
 export const ReasoningRow = memo(function ReasoningRow({
   msg,
+  defaultOpen = false,
 }: {
   msg: ReasoningMessage;
+  defaultOpen?: boolean;
 }): React.JSX.Element {
   const { t } = useI18n();
   const lineCount = msg.text.split("\n").length;
   return (
-    <div className="chat-message chat-message-agent chat-message-history">
-      <HermesAvatar />
+    <div className="chat-transcript-block chat-transcript-block--agent chat-message-history">
       <CollapsibleSection
         variant="reasoning"
+        defaultOpen={defaultOpen}
         header={
           <span className="chat-history-label">
             <span className="chat-history-title">{t("chat.thinking")}</span>
@@ -80,7 +85,9 @@ export const ReasoningRow = memo(function ReasoningRow({
           </span>
         }
       >
-        <pre className="chat-history-pre">{msg.text}</pre>
+        <div className="chat-history-markdown">
+          <ThinkingView text={msg.text} />
+        </div>
       </CollapsibleSection>
     </div>
   );
@@ -98,16 +105,18 @@ function summariseArgs(args: string): string {
 
 export const ToolCallRow = memo(function ToolCallRow({
   msg,
+  defaultOpen = false,
 }: {
   msg: ToolCallMessage;
+  defaultOpen?: boolean;
 }): React.JSX.Element {
   const { t } = useI18n();
   const summary = summariseArgs(msg.args);
   return (
-    <div className="chat-message chat-message-agent chat-message-history">
-      <HermesAvatar />
+    <div className="chat-transcript-block chat-transcript-block--agent chat-message-history">
       <CollapsibleSection
         variant="tool-call"
+        defaultOpen={defaultOpen}
         header={
           <span className="chat-history-label">
             <span className="chat-history-title">{t("chat.toolCall")}</span>
@@ -142,8 +151,7 @@ export const ToolResultRow = memo(function ToolResultRow({
   const lines = countLines(msg.content);
   const hasAttachments = !!msg.attachments && msg.attachments.length > 0;
   return (
-    <div className="chat-message chat-message-agent chat-message-history">
-      <HermesAvatar />
+    <div className="chat-transcript-block chat-transcript-block--agent chat-message-history">
       <CollapsibleSection
         variant="tool-result"
         header={

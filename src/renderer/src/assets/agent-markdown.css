@@ -1,0 +1,431 @@
+/* ========================================================================
+   Agent Markdown — technical report / Cursor preview style
+   Dark doc: white prose, green links, grey table header bar, flat layout.
+   ======================================================================== */
+
+[data-theme="dark"] {
+  --md-prose-bg: var(--bg-primary);
+  --md-heading: #ffffff;
+  --md-heading-strong: #ffffff;
+  --md-body: #e8e8e8;
+  --md-muted: #a3a3a3;
+  --md-inline-bg: rgba(255, 255, 255, 0.08);
+  --md-inline-fg: #f0f0f0;
+  --md-code-surface: transparent;
+  --md-code-header: transparent;
+  --md-border-subtle: rgba(255, 255, 255, 0.08);
+  --md-table-head-bg: #2d2d2d;
+  --md-table-rule: rgba(255, 255, 255, 0.14);
+  --md-table-row-hover: rgba(255, 255, 255, 0.04);
+  --md-link: #4ade80;
+  --md-link-hover: #86efac;
+  --md-status-danger: #f07178;
+  --md-status-success: #4ade80;
+  --md-status-warn: #fbbf24;
+  --md-highlight: #fbbf24;
+}
+
+[data-theme="light"] {
+  --md-prose-bg: var(--bg-primary);
+  --md-heading: #111111;
+  --md-heading-strong: #000000;
+  --md-body: #1a1a1a;
+  --md-muted: #666666;
+  --md-inline-bg: rgba(0, 0, 0, 0.06);
+  --md-inline-fg: #1a1a1a;
+  --md-code-surface: transparent;
+  --md-code-header: transparent;
+  --md-border-subtle: rgba(0, 0, 0, 0.1);
+  --md-table-head-bg: #f0f0f0;
+  --md-table-rule: rgba(0, 0, 0, 0.12);
+  --md-table-row-hover: rgba(0, 0, 0, 0.03);
+  --md-link: #16a34a;
+  --md-link-hover: #15803d;
+  --md-status-danger: #c62828;
+  --md-status-success: #2e7d32;
+  --md-status-warn: #e65100;
+  --md-highlight: #ca8a04;
+}
+
+/* ----- Base prose ----- */
+.agent-markdown {
+  white-space: normal;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  color: var(--md-body, var(--text-primary));
+  font-family: var(
+    --font-agent,
+    "Courier New",
+    Consolas,
+    "Microsoft YaHei",
+    "微软雅黑",
+    SimHei,
+    "黑体",
+    monospace
+  );
+  font-size: var(--agent-font-size, 14px);
+  line-height: 1.7;
+  letter-spacing: 0.01em;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+.agent-markdown--chat {
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.agent-markdown--document {
+  font-size: 14px;
+  line-height: 1.72;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  box-sizing: border-box;
+  padding: 20px 24px 40px;
+  background: var(--md-prose-bg, var(--bg-primary));
+}
+
+.agent-markdown p {
+  margin: 0 0 0.85em;
+  color: var(--md-body);
+}
+
+.agent-markdown p:last-child {
+  margin-bottom: 0;
+}
+
+/* ----- Headings (report sections) ----- */
+.agent-markdown h1,
+.agent-markdown h2,
+.agent-markdown h3,
+.agent-markdown h4,
+.agent-markdown h5,
+.agent-markdown h6 {
+  margin: 1.75em 0 0.65em;
+  padding: 0;
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--md-heading);
+  letter-spacing: 0;
+  scroll-margin-top: 12px;
+}
+
+.agent-markdown h1:first-child,
+.agent-markdown h2:first-child,
+.agent-markdown h3:first-child {
+  margin-top: 0;
+}
+
+.agent-markdown h1 {
+  font-size: 1.5rem;
+  margin-bottom: 0.75em;
+  padding-bottom: 0.4em;
+  border-bottom: 1px solid var(--md-table-rule);
+}
+
+.agent-markdown h2 {
+  font-size: 1.25rem;
+  margin-top: 2rem;
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid var(--md-border-subtle);
+}
+
+.agent-markdown h3 {
+  font-size: 1.05rem;
+  margin-top: 1.35em;
+  font-weight: 650;
+}
+
+.agent-markdown h4,
+.agent-markdown h5,
+.agent-markdown h6 {
+  font-size: 0.98rem;
+  font-weight: 650;
+  color: var(--md-body);
+}
+
+/* ----- Lists (发现 / bullet blocks) ----- */
+.agent-markdown ul,
+.agent-markdown ol {
+  margin: 0.65em 0 1em;
+  padding-left: 1.5em;
+  list-style: revert;
+  color: var(--md-body);
+}
+
+.agent-markdown li {
+  margin: 0.35em 0;
+  line-height: 1.65;
+}
+
+.agent-markdown li > p {
+  margin: 0.2em 0;
+}
+
+.agent-markdown li > ul,
+.agent-markdown li > ol {
+  margin: 0.3em 0 0.3em 1em;
+}
+
+/* ----- Inline code & paths ----- */
+.agent-markdown .md-inline-code,
+.agent-markdown code:not(pre code) {
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+  padding: 0.1em 0.38em;
+  border-radius: 4px;
+  background: var(--md-inline-bg);
+  color: var(--md-inline-fg);
+  border: none;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ----- Fenced code blocks ----- */
+.agent-markdown .chat-code-block {
+  margin: 1em 0 !important;
+  border: none;
+  border-radius: 0;
+  overflow: hidden;
+  background: transparent;
+}
+
+.agent-markdown .chat-code-header {
+  background: transparent;
+  border-bottom: none;
+  padding: 0 0 4px;
+}
+
+.agent-markdown .chat-code-lang {
+  color: var(--md-muted);
+  font-weight: 600;
+  text-transform: lowercase;
+}
+
+.agent-markdown .chat-code-copy {
+  color: var(--md-muted);
+}
+
+.agent-markdown .chat-code-copy:hover {
+  color: var(--md-body);
+}
+
+.agent-markdown .chat-code-block pre,
+.agent-markdown .chat-code-block div[class*="prism"] {
+  margin: 0 !important;
+  padding: 0 !important;
+  background: transparent !important;
+  font-size: 13px !important;
+  line-height: 1.55 !important;
+}
+
+.agent-markdown .token.comment,
+.agent-markdown .token.prolog,
+.agent-markdown .token.doctype {
+  color: #6a737d;
+  font-style: italic;
+}
+
+.agent-markdown .token.punctuation {
+  color: #abb2bf;
+}
+
+.agent-markdown .token.property,
+.agent-markdown .token.tag,
+.agent-markdown .token.key,
+.agent-markdown .token.attr-name,
+.agent-markdown .token.selector,
+.agent-markdown .token.builtin {
+  color: #7ec8e3;
+}
+
+.agent-markdown .token.string,
+.agent-markdown .token.char,
+.agent-markdown .token.regex,
+.agent-markdown .token.attr-value {
+  color: #e8e8e8;
+}
+
+.agent-markdown .token.number,
+.agent-markdown .token.constant,
+.agent-markdown .token.symbol {
+  color: #98c379;
+}
+
+.agent-markdown .token.boolean {
+  color: #d19a66;
+}
+
+.agent-markdown .token.function,
+.agent-markdown .token.class-name,
+.agent-markdown .token.keyword {
+  color: #c678dd;
+}
+
+.agent-markdown .token.operator,
+.agent-markdown .token.entity,
+.agent-markdown .token.url {
+  color: #56b6c2;
+}
+
+.agent-markdown .chat-diff-content {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  padding: 0;
+  background: transparent;
+}
+
+.agent-markdown .chat-diff-add {
+  color: var(--md-status-success);
+}
+
+.agent-markdown .chat-diff-remove {
+  color: var(--md-status-danger);
+}
+
+.agent-markdown .chat-diff-hunk {
+  color: var(--md-status-warn);
+}
+
+/* ----- Tables (grey header bar, row dividers) ----- */
+.agent-markdown .md-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  margin: 1em 0 1.25em;
+  -webkit-overflow-scrolling: touch;
+}
+
+.agent-markdown table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  display: table;
+}
+
+.agent-markdown thead {
+  background: var(--md-table-head-bg);
+}
+
+.agent-markdown th {
+  font-weight: 600;
+  color: var(--md-heading);
+  background: var(--md-table-head-bg);
+  border: none;
+  border-bottom: 1px solid var(--md-table-rule);
+  padding: 0.6em 0.85em;
+  text-align: left;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.agent-markdown td {
+  border: none;
+  border-bottom: 1px solid var(--md-border-subtle);
+  padding: 0.55em 0.85em;
+  text-align: left;
+  vertical-align: top;
+  color: var(--md-body);
+  line-height: 1.55;
+}
+
+.agent-markdown tbody tr:hover td {
+  background: var(--md-table-row-hover);
+}
+
+.agent-markdown tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.agent-markdown .md-status {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.agent-markdown .md-status--danger {
+  color: var(--md-status-danger);
+}
+
+.agent-markdown .md-status--success {
+  color: var(--md-status-success);
+}
+
+.agent-markdown .md-status--warn {
+  color: var(--md-status-warn);
+}
+
+/* ----- Links (green file refs) ----- */
+.agent-markdown a {
+  color: var(--md-link);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.agent-markdown a:hover {
+  color: var(--md-link-hover);
+  text-decoration: underline;
+}
+
+/* ----- Blockquote, hr, emphasis ----- */
+.agent-markdown blockquote {
+  margin: 1em 0;
+  padding: 0.65em 1em;
+  border-left: 3px solid var(--md-border-subtle);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--md-muted);
+  border-radius: 0 4px 4px 0;
+}
+
+.agent-markdown hr {
+  border: none;
+  border-top: 1px solid var(--md-border-subtle);
+  margin: 1.75em 0;
+}
+
+.agent-markdown strong {
+  font-weight: 650;
+  color: var(--md-heading-strong);
+}
+
+.agent-markdown em {
+  color: var(--md-body);
+  font-style: italic;
+}
+
+.agent-markdown img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 4px;
+  margin: 0.75em 0;
+}
+
+.agent-markdown input[type="checkbox"] {
+  margin-right: 0.45em;
+  accent-color: var(--md-link);
+}
+
+.agent-markdown .contains-task-list {
+  list-style: none;
+  padding-left: 0.25em;
+}
+
+.agent-markdown .task-list-item {
+  list-style: none;
+  margin: 0.35em 0;
+}
+
+.chat-workspace-preview {
+  background: var(--bg-primary);
+}
+
+.chat-workspace-preview .agent-markdown--document {
+  min-height: 100%;
+  background: transparent;
+}
+
+.chat-transcript-block--agent .agent-markdown {
+  padding: 0;
+  max-width: none;
+  width: 100%;
+  background: transparent;
+}

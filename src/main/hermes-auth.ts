@@ -8,66 +8,19 @@ import {
   getEnhancedPath,
 } from "./installer";
 import { HIDDEN_SUBPROCESS_OPTIONS } from "./process-options";
+import { resolveOAuthProviderId } from "../shared/providerLogin";
 import { stripAnsi } from "./utils";
-
-/**
- * Provider identifiers that authenticate via an interactive OAuth flow
- * (`hermes auth add <provider> --type oauth`) rather than a static API
- * key. Mirrors hermes-agent's `_OAUTH_CAPABLE_PROVIDERS` set.
- *
- * `nous` is included even though it also has an API-key variant — the
- * Providers UI now offers both surfaces (an API Key card and an
- * OAuth Sign-in card, issue #367), and the OAuth path goes through
- * this gate. The desktop previously excluded `nous` here on the
- * (incorrect) assumption that it used the normal key flow only.
- */
-export const OAUTH_LOGIN_PROVIDERS = [
-  "openai-codex",
-  "xai-oauth",
-  "qwen-oauth",
-  "google-gemini-cli",
-  "minimax-oauth",
-  "nous",
-] as const;
-
-export type OAuthLoginProvider = (typeof OAUTH_LOGIN_PROVIDERS)[number];
-
-export function isOAuthLoginProvider(
-  value: string,
-): value is OAuthLoginProvider {
-  return (OAUTH_LOGIN_PROVIDERS as readonly string[]).includes(value);
-}
+import {
+  runCopilotAuthLogin,
+  cancelCopilotAuthLogin,
+} from "./copilot-auth";
 
 export interface OAuthLoginResult {
   success: boolean;
   error?: string;
 }
 
-/**
- * Parse a device-code login prompt out of the CLI's streamed output.
- * The OpenAI Codex flow — unlike the browser-loopback providers —
- * prints a URL to open and a short code to enter rather than opening a
- * browser itself. Detecting both lets the desktop open the page and
- * pre-copy the code so the user only has to paste.
- *
- * Returns null until both parts are present. Only an `https:` URL is
- * accepted (the value is fed to `shell.openExternal`).
- */
-export function detectDeviceCode(
-  text: string,
-): { url: string; code: string } | null {
-  // `[^\S\n]*` is horizontal-whitespace-only — using `\s*` here would
-  // silently consume a blank line between the label and the value, making
-  // a false-positive match against the wrong line possible.
-  const urlMatch = text.match(
-    /Open this URL in your browser:[^\S\n]*\n[^\S\n]*(https:\/\/\S+)/,
-  );
-  const codeMatch = text.match(/Enter this code:[^\S\n]*\n[^\S\n]*(\S+)/);
-  if (urlMatch && codeMatch) {
-    return { url: urlMatch[1], code: codeMatch[1] };
-  }
-  return null;
-}
+export { detectDeviceCode } from "../shared/deviceCode";
 
 // Only one interactive login can run at a time — the renderer surfaces a
 // single modal. Tracked so the renderer can cancel a flow the user
@@ -75,27 +28,28 @@ export function detectDeviceCode(
 let activeProc: ChildProcess | null = null;
 
 /**
- * Run `hermes auth add <provider> --type oauth`, streaming the CLI's
- * stdout/stderr line-by-line to `emit`. The CLI opens the system browser
- * for the OAuth consent step and runs a localhost loopback server to
- * catch the redirect; this function just supervises that subprocess.
- *
- * Resolves `{ success: true }` on exit code 0, `{ success: false, error }`
- * otherwise (non-zero exit, spawn failure, or cancellation).
+ * Interactive OAuth sign-in for any provider id the user selects.
+ * Copilot uses a direct Python device-code flow; others invoke
+ * `hermes auth add <provider> --type oauth` without an allowlist gate.
  */
 export function runHermesAuthLogin(
   provider: string,
   emit: (chunk: string) => void,
   profile?: string,
 ): Promise<OAuthLoginResult> {
+  const oauthId = resolveOAuthProviderId(provider);
+  if (!oauthId) {
+    return Promise.resolve({
+      success: false,
+      error: "No provider selected for sign-in.",
+    });
+  }
+
+  if (oauthId === "copilot") {
+    return runCopilotAuthLogin(emit, profile);
+  }
+
   return new Promise((resolve) => {
-    if (!isOAuthLoginProvider(provider)) {
-      resolve({
-        success: false,
-        error: `Unsupported OAuth provider: ${provider}`,
-      });
-      return;
-    }
     if (activeProc) {
       resolve({
         success: false,
@@ -104,12 +58,10 @@ export function runHermesAuthLogin(
       return;
     }
 
-    // `--type oauth` is explicit so the CLI never falls back to an
-    // interactive "API key or OAuth?" prompt on a stdin we've closed.
     const subArgs =
       profile && profile !== "default"
-        ? ["-p", profile, "auth", "add", provider, "--type", "oauth"]
-        : ["auth", "add", provider, "--type", "oauth"];
+        ? ["-p", profile, "auth", "add", oauthId, "--type", "oauth"]
+        : ["auth", "add", oauthId, "--type", "oauth"];
 
     let proc: ChildProcess;
     try {
@@ -120,7 +72,9 @@ export function runHermesAuthLogin(
           PATH: getEnhancedPath(),
           HOME: homedir(),
           HERMES_HOME,
+          PYTHONPATH: HERMES_REPO,
           TERM: "dumb",
+          PYTHONUNBUFFERED: "1",
         },
         stdio: ["ignore", "pipe", "pipe"],
         ...HIDDEN_SUBPROCESS_OPTIONS,
@@ -155,17 +109,20 @@ export function runHermesAuthLogin(
       } else if (signal) {
         finish({ success: false, error: "Sign-in cancelled." });
       } else {
-        finish({ success: false, error: `Sign-in exited with code ${code}.` });
+        finish({
+          success: false,
+          error: `Sign-in exited with code ${code}. This provider may only support API keys — paste a key above instead.`,
+        });
       }
     });
   });
 }
 
 /**
- * Kill the in-flight login subprocess, if any. Used when the user closes
- * the sign-in modal before the OAuth flow completes.
+ * Kill the in-flight login subprocess, if any.
  */
 export function cancelHermesAuthLogin(): boolean {
+  if (cancelCopilotAuthLogin()) return true;
   if (!activeProc) return false;
   activeProc.kill();
   return true;

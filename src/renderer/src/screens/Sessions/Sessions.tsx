@@ -208,6 +208,12 @@ function Sessions({
     }
   }, [visible, loadSessions]);
 
+  useEffect(() => {
+    if (visible && currentSessionId) {
+      void refreshSessions();
+    }
+  }, [visible, currentSessionId, refreshSessions]);
+
   // While the Sessions tab is actually showing, periodically re-sync so
   // sessions created in the background — cron jobs, gateway platforms, or
   // another device writing the same state.db — surface even if the user

@@ -160,7 +160,7 @@ describe("expandRowsToHistory", () => {
     expect(reasoning.text).toBe("first I think...");
   });
 
-  it("emits tool_calls after the assistant bubble, in array order", () => {
+  it("emits tool_calls before the assistant bubble, in array order", () => {
     const items = expandRowsToHistory([
       row({
         id: 1,
@@ -183,8 +183,8 @@ describe("expandRowsToHistory", () => {
         ]),
       }),
     ]);
-    expect(kinds(items)).toEqual(["assistant", "tool_call", "tool_call"]);
-    const a = items[1] as Extract<HistoryItem, { kind: "tool_call" }>;
+    expect(kinds(items)).toEqual(["tool_call", "tool_call", "assistant"]);
+    const a = items[0] as Extract<HistoryItem, { kind: "tool_call" }>;
     expect(a.name).toBe("terminal");
     expect(a.callId).toBe("call_a");
   });
@@ -273,8 +273,8 @@ describe("expandRowsToHistory", () => {
     expect(kinds(items)).toEqual([
       "user",
       "reasoning",
-      "assistant",
       "tool_call",
+      "assistant",
       "tool_result",
       "assistant",
     ]);

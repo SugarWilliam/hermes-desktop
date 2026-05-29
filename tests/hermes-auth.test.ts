@@ -58,12 +58,10 @@ vi.mock("child_process", () => ({
   default: { spawn: spawnSpy },
 }));
 
+import { detectDeviceCode } from "../src/shared/deviceCode";
 import {
   runHermesAuthLogin,
   cancelHermesAuthLogin,
-  isOAuthLoginProvider,
-  detectDeviceCode,
-  OAUTH_LOGIN_PROVIDERS,
 } from "../src/main/hermes-auth";
 
 function lastProc(): FakeProc {
@@ -137,20 +135,29 @@ describe("detectDeviceCode", () => {
     ].join("\n");
     expect(detectDeviceCode(blankCodeGap)).toBeNull();
   });
-});
 
-describe("isOAuthLoginProvider", () => {
-  it("accepts the five OAuth-capable providers", () => {
-    for (const p of OAUTH_LOGIN_PROVIDERS) {
-      expect(isOAuthLoginProvider(p)).toBe(true);
-    }
+  it("extracts Hermes copilot_device_code_login prompt", () => {
+    const hermesPrompt = [
+      "  Open this URL in your browser: https://github.com/login/device",
+      "  Enter this code: ABCD-1234",
+    ].join("\n");
+    expect(detectDeviceCode(hermesPrompt)).toEqual({
+      url: "https://github.com/login/device",
+      code: "ABCD-1234",
+    });
   });
 
-  it("rejects API-key providers and unknown values", () => {
-    expect(isOAuthLoginProvider("openrouter")).toBe(false);
-    expect(isOAuthLoginProvider("anthropic")).toBe(false);
-    expect(isOAuthLoginProvider("kimi-coding")).toBe(false);
-    expect(isOAuthLoginProvider("")).toBe(false);
+  it("extracts GitHub Copilot device prompt (OpenCode-style)", () => {
+    const copilotPrompt = [
+      "┌ Add credential",
+      "│ GitHub Copilot",
+      "● Go to: https://github.com/login/device",
+      "● Enter code: E316-2F13",
+    ].join("\n");
+    expect(detectDeviceCode(copilotPrompt)).toEqual({
+      url: "https://github.com/login/device",
+      code: "E316-2F13",
+    });
   });
 });
 
@@ -160,11 +167,13 @@ describe("runHermesAuthLogin", () => {
     fakeProcs.length = 0;
   });
 
-  it("refuses an unsupported provider without spawning", async () => {
-    const result = await runHermesAuthLogin("openrouter", () => {});
-    expect(result.success).toBe(false);
-    expect(result.error).toMatch(/unsupported/i);
-    expect(spawnSpy).not.toHaveBeenCalled();
+  it("spawns oauth for any provider id (no allowlist)", async () => {
+    const promise = runHermesAuthLogin("openrouter", () => {});
+    expect(spawnSpy).toHaveBeenCalledTimes(1);
+    const args = spawnSpy.mock.calls[0][1] as string[];
+    expect(args).toEqual(["auth", "add", "openrouter", "--type", "oauth"]);
+    lastProc().emit("close", 0, null);
+    await promise;
   });
 
   it("spawns `auth add <provider> --type oauth` and streams output", async () => {

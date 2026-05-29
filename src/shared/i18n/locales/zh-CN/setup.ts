@@ -3,6 +3,9 @@ export default {
   subtitle: "选择提供商并完成配置即可开始使用",
   providerCards: {
     openrouter: { name: "OpenRouter", desc: "200+ 模型", tag: "推荐" },
+    copilot: { name: "GitHub Copilot", desc: "GitHub 设备码 / OAuth 登录", tag: "登录" },
+    deepseek: { name: "DeepSeek", desc: "国内可用对话模型", tag: "国内" },
+    nous: { name: "Nous Portal", desc: "API Key 或 OAuth，任选其一", tag: "可选" },
     anthropic: { name: "Anthropic", desc: "Claude 模型", tag: "" },
     openai: { name: "OpenAI", desc: "GPT 模型", tag: "" },
     local: {
@@ -22,6 +25,12 @@ export default {
     fireworks: "Fireworks",
     cerebras: "Cerebras",
     mistral: "Mistral",
+    "kimi-moonshot": "Kimi 开放平台",
+    "kimi-moonshot-cn": "Kimi 国内",
+    "kimi-code": "Kimi Code",
+    "opencode-go": "OpenCode Go",
+    "opencode-zen": "OpenCode Zen",
+    "qwen-cn": "通义 Qwen",
   },
   serverPreset: "服务器预设",
   localGroupLabel: "本地服务",
@@ -34,6 +43,7 @@ export default {
   customApiKeyHint: "远程 API 需要填写；本地服务可留空。",
   defaultModelHint: "留空则使用服务端默认模型",
   missingApiKey: "请输入 API Key",
+  missingOAuth: "请先完成 OAuth 登录",
   missingServerUrl: "请输入服务器地址",
   saveFailed: "保存配置失败",
   noKeyHint: "还没有 Key？点此获取",
@@ -42,6 +52,11 @@ export default {
   apiKeyLabel: "{{provider}} API Key",
   noApiKeyRequired:
     "{{provider}} 不需要 API Key。Hermes 会使用本机 CLI/OAuth 配置。",
+  oauthSignIn: "登录",
+  oauthSignInHint: "在浏览器中完成授权；也可先跳过，稍后在「提供商」页登录。",
+  oauthOptionalKey: "API Key（可选，也可点击下方 OAuth 登录）",
+  nousOptionalHint:
+    "可填写 Nous API Key 和/或 OAuth 登录；也可先继续，稍后在提供商页配置。",
   localNoKeyNeeded: "无需 API Key",
   localLlm: "本地模型",
   modelBaseUrlPlaceholder: "http://localhost:1234/v1",

@@ -20,6 +20,10 @@ export function detectProviderFromUrl(rawUrl: string): string | null {
   if (/nousresearch\.com/.test(url)) return "nous";
   if (/dashscope(-intl)?\.aliyuncs\.com/.test(url)) return "qwen";
   if (/api\.minimax(i)?\.(chat|com)/.test(url)) return "minimax";
+  if (/api\.kimi\.com\/coding/.test(url)) return "kimi-coding";
+  if (/api\.moonshot\.(ai|cn)/.test(url)) return "kimi";
+  if (/opencode\.ai\/zen\/go/.test(url)) return "custom";
+  if (/opencode\.ai\/zen/.test(url)) return "custom";
 
   // Anything pointing at a private or loopback address is almost always a
   // self-hosted OpenAI-compatible endpoint (Ollama, LM Studio, vLLM,

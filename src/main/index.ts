@@ -13,6 +13,19 @@ import { electronApp, optimizer, is } from "@electron-toolkit/utils";
 import type { AppUpdater } from "electron-updater";
 import icon from "../../resources/icon.png?asset";
 import type { Attachment } from "../shared/attachments";
+import type { ChatMode } from "../shared/chatMode";
+import {
+  listWorkspaceDir,
+  readWorkspaceTextFile,
+  writeWorkspaceTextFile,
+  pickWorkspaceFiles,
+  getWorkspaceGitStatus,
+} from "./workspace";
+import { readLocalAttachmentFile } from "./localAttachmentFile";
+import {
+  buildWebContentsContextMenu,
+  getContextMenuLabels,
+} from "./context-menu";
 import { stageAttachment, clearStagedAttachments } from "./attachment-staging";
 import { discoverProviderModels } from "./model-discovery";
 import { readMediaAsDataUrl, saveMedia, mediaFileExists } from "./media";
@@ -110,6 +123,7 @@ import {
   syncSessionCache,
   listCachedSessions,
   updateSessionTitle,
+  registerDesktopSession,
 } from "./session-cache";
 import { listModels, addModel, removeModel, updateModel } from "./models";
 import {
@@ -338,44 +352,23 @@ function createWindow(): void {
   // via Electron roles — they act on the focused field / selection and work
   // across the whole app — plus two items to copy the whole conversation.
   mainWindow.webContents.on("context-menu", (_event, params) => {
-    const { editFlags, isEditable } = params;
-    const template: Electron.MenuItemConstructorOptions[] = [];
-    if (isEditable) {
-      template.push(
-        { role: "cut", enabled: editFlags.canCut },
-        { role: "copy", enabled: editFlags.canCopy },
-        { role: "paste", enabled: editFlags.canPaste },
-        { type: "separator" },
-        // The selectAll role scopes correctly to the focused input field.
-        { role: "selectAll" },
-      );
-    } else {
-      template.push(
-        { role: "copy", enabled: editFlags.canCopy },
-        { type: "separator" },
-        // The selectAll role would select the entire window for non-editable
-        // content — scope it to the message bubble under the cursor instead.
-        {
-          label: "Select All",
-          click: () =>
-            mainWindow?.webContents.send("context-menu-select-bubble", {
-              x: params.x,
-              y: params.y,
-            }),
-        },
-      );
-    }
-    template.push(
-      { type: "separator" },
+    const labels = getContextMenuLabels();
+    const template = buildWebContentsContextMenu(
       {
-        label: "Copy entire chat (text)",
-        click: () =>
-          mainWindow?.webContents.send("context-menu-copy-chat", "text"),
+        editFlags: params.editFlags,
+        isEditable: params.isEditable,
+        selectionText: params.selectionText ?? "",
+        x: params.x,
+        y: params.y,
       },
+      labels,
       {
-        label: "Copy entire chat (Markdown)",
-        click: () =>
-          mainWindow?.webContents.send("context-menu-copy-chat", "markdown"),
+        onAddSelection: (text) =>
+          mainWindow?.webContents.send("context-menu-add-to-chat", text),
+        onSelectBubble: (point) =>
+          mainWindow?.webContents.send("context-menu-select-bubble", point),
+        onCopyChat: (format) =>
+          mainWindow?.webContents.send("context-menu-copy-chat", format),
       },
     );
     Menu.buildFromTemplate(template).popup();
@@ -764,6 +757,7 @@ function setupIPC(): void {
       history?: Array<{ role: string; content: string }>,
       attachments?: Attachment[],
       contextFolder?: string,
+      chatMode?: ChatMode,
     ) => {
       if (!isRemoteMode() && !isGatewayRunning()) {
         startGateway(profile);
@@ -816,6 +810,22 @@ function setupIPC(): void {
         }
       };
 
+      const mc = getModelConfig(profile);
+      const approxMessageCount = (history?.length ?? 0) + 1;
+      const cacheSession = (sid: string): void => {
+        registerDesktopSession({
+          id: sid,
+          userMessage: message,
+          model: mc.model || "",
+          messageCount: approxMessageCount,
+        });
+      };
+      if (resumeSessionId) {
+        cacheSession(resumeSessionId);
+      }
+
+      let activeSessionId = resumeSessionId || "";
+
       const handle = await sendMessage(
         message,
         {
@@ -836,8 +846,19 @@ function setupIPC(): void {
               currentChatAbort();
             }
           },
+          onSessionId: (sid) => {
+            activeSessionId = sid;
+            cacheSession(sid);
+            safeSend("chat-session-id", sid);
+          },
           onDone: (sessionId) => {
+            if (sessionId) activeSessionId = sessionId;
             currentChatAbort = null;
+            try {
+              syncSessionCache();
+            } catch {
+              /* best-effort */
+            }
             safeSend("chat-done", sessionId || "");
             resolveChat({ response: fullResponse, sessionId });
             // Desktop notification when window is not focused and response took >10s
@@ -858,7 +879,15 @@ function setupIPC(): void {
           },
           onError: (error) => {
             currentChatAbort = null;
-            safeSend("chat-error", error);
+            try {
+              syncSessionCache();
+            } catch {
+              /* best-effort */
+            }
+            safeSend("chat-error", {
+              error,
+              sessionId: activeSessionId || undefined,
+            });
             rejectChat(new Error(error));
             // Notify on error too if window not focused
             if (mainWindow && !mainWindow.isFocused()) {
@@ -880,6 +909,7 @@ function setupIPC(): void {
         history,
         attachments,
         contextFolder,
+        chatMode ?? "chat",
       );
 
       currentChatAbort = handle.abort;
@@ -897,6 +927,43 @@ function setupIPC(): void {
   // Renderer-driven clipboard write (issue #298 — "Copy entire chat").
   // Routed through the main process so it doesn't depend on the renderer's
   // document being focused, which the navigator.clipboard API requires.
+  ipcMain.handle(
+    "show-popup-menu",
+    async (
+      event,
+      items: Array<{
+        id: string;
+        label: string;
+        enabled?: boolean;
+        type?: "separator";
+      }>,
+    ): Promise<string | null> => {
+      const win = BrowserWindow.fromWebContents(event.sender);
+      return new Promise((resolve) => {
+        let settled = false;
+        const finish = (id: string | null): void => {
+          if (settled) return;
+          settled = true;
+          resolve(id);
+        };
+        const template: Electron.MenuItemConstructorOptions[] = items.map(
+          (item) => {
+            if (item.type === "separator") return { type: "separator" };
+            return {
+              label: item.label,
+              enabled: item.enabled !== false,
+              click: () => finish(item.id),
+            };
+          },
+        );
+        Menu.buildFromTemplate(template).popup({
+          window: win ?? undefined,
+          callback: () => finish(null),
+        });
+      });
+    },
+  );
+
   ipcMain.handle("copy-to-clipboard", (_event, text: string) => {
     clipboard.writeText(typeof text === "string" ? text : "");
   });
@@ -1451,6 +1518,36 @@ function setupIPC(): void {
       : await dialog.showOpenDialog({ properties: ["openDirectory"] });
     if (result.canceled || result.filePaths.length === 0) return null;
     return result.filePaths[0];
+  });
+
+  ipcMain.handle(
+    "workspace-list-dir",
+    async (_event, root: string, relativePath?: string) => {
+      return listWorkspaceDir(root, relativePath ?? "");
+    },
+  );
+  ipcMain.handle("workspace-git-status", async (_event, root: string) => {
+    return getWorkspaceGitStatus(root);
+  });
+  ipcMain.handle(
+    "workspace-read-file",
+    async (_event, root: string, filePath: string) => {
+      return readWorkspaceTextFile(root, filePath);
+    },
+  );
+  ipcMain.handle("read-attachment-file", async (_event, absPath: string) => {
+    return readLocalAttachmentFile(absPath);
+  });
+  ipcMain.handle(
+    "workspace-write-file",
+    async (_event, root: string, filePath: string, content: string) => {
+      await writeWorkspaceTextFile(root, filePath, content);
+      return true;
+    },
+  );
+  ipcMain.handle("workspace-pick-files", async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    return pickWorkspaceFiles(win);
   });
   ipcMain.handle(
     "kanban-assign-task",

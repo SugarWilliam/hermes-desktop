@@ -12,6 +12,31 @@ export interface SectionDef {
   items: FieldDef[];
 }
 
+// ── Setup (first-run provider grid) ───────────────────
+
+export type SetupAuthType =
+  | "api_key"
+  | "oauth"
+  | "api_key_or_oauth"
+  | "none";
+
+export interface SetupProviderDef {
+  id: string;
+  name: string;
+  desc: string;
+  tag: string;
+  envKey: string;
+  url: string;
+  placeholder: string;
+  configProvider: string;
+  baseUrl: string;
+  needsKey: boolean;
+  /** How the user authenticates on the setup screen. */
+  authType: SetupAuthType;
+  /** Used when the model name field is left blank. */
+  defaultModel?: string;
+}
+
 // ── Providers ───────────────────────────────────────────
 
 export const PROVIDERS = {
@@ -43,6 +68,7 @@ export const PROVIDERS = {
     { value: "qwen", label: "Qwen" },
     { value: "minimax", label: "MiniMax" },
     { value: "nous", label: "constants.nousName" },
+    { value: "copilot", label: "GitHub Copilot" },
     // Subscription / OAuth plans
     // openai-codex is listed once above (first-party group) via #102 —
     // not repeated here to avoid a duplicate <option> value.
@@ -75,6 +101,7 @@ export const PROVIDERS = {
     qwen: "Qwen",
     minimax: "MiniMax",
     nous: "constants.nousName",
+    copilot: "GitHub Copilot",
     "xai-oauth": "xAI Grok (OAuth)",
     "qwen-oauth": "Qwen (OAuth)",
     "google-gemini-cli": "Gemini (CLI OAuth)",
@@ -95,6 +122,49 @@ export const PROVIDERS = {
       configProvider: "openrouter",
       baseUrl: "https://openrouter.ai/api/v1",
       needsKey: true,
+      authType: "api_key_or_oauth",
+      defaultModel: "deepseek/deepseek-r1:free",
+    },
+    {
+      id: "copilot",
+      name: "constants.copilotSetupName",
+      desc: "providers.oauth.copilotDesc",
+      tag: "constants.oauthTag",
+      envKey: "",
+      url: "",
+      placeholder: "",
+      configProvider: "copilot",
+      baseUrl: "",
+      needsKey: false,
+      authType: "oauth",
+      defaultModel: "gpt-5.4-mini",
+    },
+    {
+      id: "deepseek",
+      name: "constants.deepseek",
+      desc: "constants.deepseekSetupDesc",
+      tag: "constants.deepseekTag",
+      envKey: "DEEPSEEK_API_KEY",
+      url: "https://platform.deepseek.com/api_keys",
+      placeholder: "sk-...",
+      configProvider: "deepseek",
+      baseUrl: "",
+      needsKey: true,
+      authType: "api_key_or_oauth",
+      defaultModel: "deepseek-chat",
+    },
+    {
+      id: "openai-codex",
+      name: "constants.openaiCodexName",
+      desc: "constants.openaiCodexDesc",
+      tag: "constants.openaiCodexTag",
+      envKey: "",
+      url: "",
+      placeholder: "",
+      configProvider: "openai-codex",
+      baseUrl: "",
+      needsKey: false,
+      authType: "oauth",
     },
     {
       id: "anthropic",
@@ -107,6 +177,7 @@ export const PROVIDERS = {
       configProvider: "anthropic",
       baseUrl: "",
       needsKey: true,
+      authType: "api_key_or_oauth",
     },
     {
       id: "openai",
@@ -124,18 +195,7 @@ export const PROVIDERS = {
       configProvider: "custom",
       baseUrl: "https://api.openai.com/v1",
       needsKey: true,
-    },
-    {
-      id: "openai-codex",
-      name: "constants.openaiCodexName",
-      desc: "constants.openaiCodexDesc",
-      tag: "constants.openaiCodexTag",
-      envKey: "",
-      url: "",
-      placeholder: "",
-      configProvider: "openai-codex",
-      baseUrl: "",
-      needsKey: false,
+      authType: "api_key_or_oauth",
     },
     {
       id: "google",
@@ -148,6 +208,7 @@ export const PROVIDERS = {
       configProvider: "google",
       baseUrl: "",
       needsKey: true,
+      authType: "api_key_or_oauth",
     },
     {
       id: "xai",
@@ -160,18 +221,21 @@ export const PROVIDERS = {
       configProvider: "xai",
       baseUrl: "",
       needsKey: true,
+      authType: "api_key_or_oauth",
     },
     {
       id: "nous",
       name: "constants.nousName",
       desc: "constants.nousDesc",
       tag: "constants.nousTag",
-      envKey: "",
-      url: "",
-      placeholder: "",
+      envKey: "NOUS_API_KEY",
+      url: "https://portal.nousresearch.com",
+      placeholder: "sk-...",
       configProvider: "nous",
       baseUrl: "",
       needsKey: false,
+      authType: "api_key_or_oauth",
+      defaultModel: "deepseek/deepseek-v4-flash:free",
     },
     {
       id: "local",
@@ -184,8 +248,9 @@ export const PROVIDERS = {
       configProvider: "custom",
       baseUrl: "http://localhost:1234/v1",
       needsKey: false,
+      authType: "none",
     },
-  ],
+  ] satisfies SetupProviderDef[],
 };
 
 // Subscription / OAuth-plan providers — these authenticate through an
@@ -203,6 +268,11 @@ export const OAUTH_PROVIDERS: OAuthProviderDef[] = [
     id: "openai-codex",
     name: "ChatGPT (Codex Plan)",
     desc: "providers.oauth.codexDesc",
+  },
+  {
+    id: "copilot",
+    name: "GitHub Copilot",
+    desc: "providers.oauth.copilotDesc",
   },
   {
     id: "xai-oauth",
@@ -277,6 +347,48 @@ export const LOCAL_PRESETS: LocalPreset[] = [
     baseUrl: "https://api.deepseek.com/v1",
     group: "remote",
     envKey: "DEEPSEEK_API_KEY",
+  },
+  {
+    id: "kimi-moonshot",
+    name: "constants.kimiMoonshot",
+    baseUrl: "https://api.moonshot.ai/v1",
+    group: "remote",
+    envKey: "KIMI_API_KEY",
+  },
+  {
+    id: "kimi-moonshot-cn",
+    name: "constants.kimiMoonshotCn",
+    baseUrl: "https://api.moonshot.cn/v1",
+    group: "remote",
+    envKey: "KIMI_API_KEY",
+  },
+  {
+    id: "kimi-code",
+    name: "constants.kimiCode",
+    baseUrl: "https://api.kimi.com/coding/v1",
+    group: "remote",
+    envKey: "KIMI_CODING_API_KEY",
+  },
+  {
+    id: "opencode-go",
+    name: "constants.opencodeGo",
+    baseUrl: "https://opencode.ai/zen/go/v1",
+    group: "remote",
+    envKey: "OPENCODE_GO_API_KEY",
+  },
+  {
+    id: "opencode-zen",
+    name: "constants.opencodeZen",
+    baseUrl: "https://opencode.ai/zen/v1",
+    group: "remote",
+    envKey: "OPENCODE_ZEN_API_KEY",
+  },
+  {
+    id: "qwen-cn",
+    name: "constants.qwenDashscope",
+    baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    group: "remote",
+    envKey: "QWEN_API_KEY",
   },
   {
     id: "together",
@@ -359,6 +471,12 @@ export const SETTINGS_SECTIONS: SectionDef[] = [
         label: "constants.kimiApiKey",
         type: "password",
         hint: "constants.kimiHint",
+      },
+      {
+        key: "KIMI_CODING_API_KEY",
+        label: "constants.kimiCodingApiKey",
+        type: "password",
+        hint: "constants.kimiCodingHint",
       },
       {
         key: "MINIMAX_API_KEY",

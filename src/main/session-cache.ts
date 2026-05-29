@@ -226,6 +226,51 @@ export function listCachedSessions(limit = 50, offset = 0): CachedSession[] {
   return cache.sessions.slice(offset, offset + limit);
 }
 
+/**
+ * Optimistically record a Desktop-originated session in sessions.json as soon
+ * as the user sends — do not wait for state.db (gateway may only persist on
+ * stream end, or never if the request stalls).
+ */
+export function registerDesktopSession(opts: {
+  id: string;
+  userMessage?: string;
+  model?: string;
+  messageCount?: number;
+}): void {
+  if (!opts.id) return;
+  const cache = readCache();
+  const now = Math.floor(Date.now() / 1000);
+  const newTitle = opts.userMessage
+    ? generateTitle(opts.userMessage)
+    : t("sessions.newConversation", getAppLocale());
+  const genericTitle = t("sessions.newConversation", getAppLocale());
+  const idx = cache.sessions.findIndex((s) => s.id === opts.id);
+
+  if (idx >= 0) {
+    const s = cache.sessions[idx];
+    if (opts.messageCount !== undefined) {
+      s.messageCount = Math.max(s.messageCount, opts.messageCount);
+    }
+    if (opts.model) s.model = opts.model;
+    if (opts.userMessage && (!s.title || s.title === genericTitle)) {
+      s.title = newTitle;
+    }
+    if (s.source === "cli") s.source = "desktop";
+  } else {
+    cache.sessions.unshift({
+      id: opts.id,
+      title: newTitle,
+      startedAt: now,
+      source: "desktop",
+      messageCount: opts.messageCount ?? 1,
+      model: opts.model || "",
+    });
+  }
+
+  cache.sessions.sort((a, b) => b.startedAt - a.startedAt);
+  writeCache(cache);
+}
+
 // Update title for a specific session
 export function updateSessionTitle(sessionId: string, title: string): void {
   const cache = readCache();

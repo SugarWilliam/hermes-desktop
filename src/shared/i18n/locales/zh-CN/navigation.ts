@@ -13,4 +13,10 @@ export default {
   kanban: "看板",
   gateway: "网关",
   settings: "设置",
+  main: "主导航",
+  groupWorkspace: "工作区",
+  groupAi: "模型与能力",
+  groupSystem: "系统",
+  expandSidebar: "展开侧栏",
+  collapseSidebar: "收起侧栏",
 } as const;
