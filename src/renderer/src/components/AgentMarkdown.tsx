@@ -6,6 +6,16 @@ import { useI18n } from "./useI18n";
 import { MediaImage, DownloadChip } from "./MediaImage";
 import { describeImageSrc } from "../screens/Chat/mediaUtils";
 import {
+  inferFenceLanguage,
+  langCssClass,
+} from "../../../shared/markdownCodeStyle";
+import { InlineCode } from "./InlineCode";
+import {
+  PRISM_BLOCK_OPTIONS,
+  PRISM_BLOCK_STYLE,
+  prismCodeTagProps,
+} from "./MarkdownPrism";
+import {
   createUniqueSlugger,
   isExternalHref,
   scrollToMarkdownAnchor,
@@ -13,132 +23,15 @@ import {
 
 // Lazy-load the heavy syntax highlighter — only imported when a code block renders
 let _highlighterMod: typeof import("react-syntax-highlighter") | null = null;
-let _oneDark: Record<string, React.CSSProperties> | null = null;
 let _loadingPromise: Promise<void> | null = null;
 
 function loadHighlighter(): Promise<void> {
-  if (_highlighterMod && _oneDark) return Promise.resolve();
+  if (_highlighterMod) return Promise.resolve();
   if (_loadingPromise) return _loadingPromise;
-  _loadingPromise = Promise.all([
-    import("react-syntax-highlighter"),
-    import("react-syntax-highlighter/dist/esm/styles/prism/one-dark"),
-  ]).then(([mod, style]) => {
+  _loadingPromise = import("react-syntax-highlighter").then((mod) => {
     _highlighterMod = mod;
-    _oneDark = style.default;
   });
   return _loadingPromise;
-}
-
-const HIGHLIGHT_ALIASES: Record<string, string> = {
-  "c++": "cpp",
-  cc: "cpp",
-  cxx: "cpp",
-  h: "c",
-  hpp: "cpp",
-  hh: "cpp",
-  hxx: "cpp",
-  py: "python",
-  pyw: "python",
-  python3: "python",
-  js: "javascript",
-  jsx: "jsx",
-  mjs: "javascript",
-  cjs: "javascript",
-  ts: "typescript",
-  tsx: "tsx",
-  mts: "typescript",
-  cts: "typescript",
-  sh: "bash",
-  shell: "bash",
-  zsh: "bash",
-  fish: "bash",
-  ps1: "powershell",
-  pwsh: "powershell",
-  yml: "yaml",
-  md: "markdown",
-  mdx: "markdown",
-  json: "json",
-  jsonc: "json",
-  json5: "json",
-  toml: "toml",
-  ini: "ini",
-  conf: "ini",
-  cfg: "ini",
-  dockerfile: "docker",
-  makefile: "makefile",
-  mk: "makefile",
-  cmake: "cmake",
-  rs: "rust",
-  go: "go",
-  golang: "go",
-  kt: "kotlin",
-  kts: "kotlin",
-  java: "java",
-  cs: "csharp",
-  fs: "fsharp",
-  rb: "ruby",
-  php: "php",
-  swift: "swift",
-  scala: "scala",
-  r: "r",
-  lua: "lua",
-  perl: "perl",
-  pl: "perl",
-  sql: "sql",
-  graphql: "graphql",
-  gql: "graphql",
-  html: "markup",
-  htm: "markup",
-  xml: "markup",
-  svg: "markup",
-  css: "css",
-  scss: "scss",
-  sass: "sass",
-  less: "less",
-  styl: "stylus",
-  vue: "markup",
-  svelte: "markup",
-  tex: "latex",
-  latex: "latex",
-  proto: "protobuf",
-  protobuf: "protobuf",
-  asm: "asm",
-  s: "asm",
-  arm: "armasm",
-  verilog: "verilog",
-  vhdl: "vhdl",
-  matlab: "matlab",
-  objc: "objectivec",
-  objcpp: "objectivec",
-  ml: "ocaml",
-  ocaml: "ocaml",
-  hs: "haskell",
-  haskell: "haskell",
-  clj: "clojure",
-  cljs: "clojure",
-  dart: "dart",
-  zig: "zig",
-  nim: "nim",
-  ex: "elixir",
-  exs: "elixir",
-  erl: "erlang",
-  groovy: "groovy",
-  gradle: "groovy",
-  tf: "hcl",
-  hcl: "hcl",
-  nginx: "nginx",
-  apache: "apacheconf",
-  bat: "batch",
-  cmd: "batch",
-  log: "log",
-  txt: "text",
-  text: "text",
-  plaintext: "text",
-};
-
-function normalizeHighlightLanguage(lang: string): string {
-  const key = lang.toLowerCase().replace(/^c\+\+$/i, "cpp").trim();
-  return HIGHLIGHT_ALIASES[key] || key;
 }
 
 function cellTextContent(node: ReactNode): string {
@@ -226,13 +119,15 @@ function CodeBlock({
   const { t } = useI18n();
   const [copied, setCopied] = useState(false);
   const [highlighterReady, setHighlighterReady] = useState(
-    () => _highlighterMod !== null && _oneDark !== null,
+    () => _highlighterMod !== null,
   );
   const code = String(children).replace(/\n$/, "");
   const match = /language-([\w+#.-]+)/.exec(className || "");
   const rawLang = match ? match[1] : "";
-  const language = normalizeHighlightLanguage(rawLang);
+  const language = inferFenceLanguage(code, rawLang);
   const isDiff = language === "diff";
+  const langLabel = isDiff ? "diff" : language || "code";
+  const langClass = langCssClass(language || "text");
 
   useEffect(() => {
     if (!highlighterReady) {
@@ -247,39 +142,26 @@ function CodeBlock({
   }
 
   const fallbackPre = (
-    <pre
-      style={{
-        margin: 0,
-        borderRadius: 0,
-        fontSize: "13px",
-        padding: "14px 16px",
-        background: "transparent",
-        color: "#abb2bf",
-        overflow: "auto",
-        fontFamily: "var(--font-mono)",
-      }}
-    >
-      {code}
-    </pre>
+    <pre className="md-code-fallback">{code}</pre>
   );
 
   return (
-    <div className="chat-code-block">
+    <div className={`chat-code-block ${langClass}`}>
       <div className="chat-code-header">
-        <span className="chat-code-lang">
-          {isDiff ? "diff" : language || "code"}
-        </span>
+        <span className={`chat-code-lang ${langClass}`}>{langLabel}</span>
         <button type="button" className="chat-code-copy" onClick={handleCopy}>
           {copied ? t("common.copied") : <Copy size={13} />}
         </button>
       </div>
       {isDiff ? (
         <DiffView code={code} />
-      ) : highlighterReady && _highlighterMod && _oneDark ? (
+      ) : highlighterReady && _highlighterMod ? (
         <_highlighterMod.Prism
-          style={_oneDark}
+          style={PRISM_BLOCK_STYLE}
           language={language || "text"}
           PreTag="div"
+          codeTagProps={prismCodeTagProps(language)}
+          {...PRISM_BLOCK_OPTIONS}
           customStyle={{
             margin: 0,
             borderRadius: 0,
@@ -434,16 +316,12 @@ const AgentMarkdown = memo(function AgentMarkdown({
             </MarkdownTableCell>
           ),
           pre: ({ children }) => <>{children}</>,
-          code: ({ className: codeClass, children: codeChildren, ...props }) => {
+          code: ({ className: codeClass, children: codeChildren }) => {
             const isFenced = /language-/.test(codeClass || "");
             const text = String(codeChildren ?? "");
             const isInline = !isFenced && !text.includes("\n");
             if (isInline) {
-              return (
-                <code className="md-inline-code" {...props}>
-                  {codeChildren}
-                </code>
-              );
+              return <InlineCode text={text} />;
             }
             return (
               <CodeBlock className={codeClass}>{codeChildren}</CodeBlock>

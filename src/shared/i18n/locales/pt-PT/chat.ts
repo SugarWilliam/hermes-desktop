@@ -5,8 +5,6 @@ export default {
   auto: "Auto",
   commandsTitle: "Comandos",
   typeMessage: "Escreva uma mensagem... (Shift+Enter para nova linha)",
-  quickAskTitle:
-    "Pergunta Rápida (/btw) — pergunta lateral que não afectará o contexto da conversa",
   send: "Enviar",
   custom: "Personalizado",
   typeModelName: "Escreva o nome do modelo...",

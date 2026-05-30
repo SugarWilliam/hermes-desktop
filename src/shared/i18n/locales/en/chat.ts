@@ -5,8 +5,6 @@ export default {
   auto: "Auto",
   commandsTitle: "Commands",
   typeMessage: "Type a message... (Shift+Enter for new line)",
-  quickAskTitle:
-    "Quick Ask (/btw) — side question that won't affect conversation context",
   send: "Send",
   custom: "Custom",
   typeModelName: "Type model name...",
@@ -49,6 +47,12 @@ export default {
       "Conversation context is full and auto-compression cannot shrink it further. Try: ① Start a new chat (Cmd/Ctrl+N or /new); ② Send /compress or /compact to summarize history; ③ Remove large @file attachments from the prompt; ④ Switch to a model with a larger context window; ⑤ If this happens on the first long turn, set model.context_length in ~/.hermes/config.yaml.",
     agentIdleHint:
       "The gateway sent no stream data for several minutes (large repo scan or tool loop). Try: ① Send a shorter follow-up in the same session to resume; ② Check Settings → run diagnosis — confirm Gateway is running; ③ Restart Gateway or switch model/provider; ④ Break the task into smaller steps instead of one huge analysis prompt.",
+    sessionNotFoundHint:
+      "Desktop session IDs (desk-…) require the Gateway HTTP API. Open Settings → generate an API server key, restart Gateway, then retry — do not rely on CLI fallback.",
+    apiServerKeyHint:
+      "Set API_SERVER_KEY in your Hermes .env (Settings → generate key), then restart Gateway. Without it, api_server cannot listen on 127.0.0.1:8642 and attachments/agent mode will fail.",
+    gatewayApiUnavailableHint:
+      "If gateway logs already show api_server on 127.0.0.1:8642: ① Settings → Connection = Local; ② Settings → Gateway → Restart; ③ Start a new chat and retry (wait ~2s after gateway start); ④ Ensure desktop and gateway share the same API_SERVER_KEY in %LOCALAPPDATA%\\hermes\\.env.",
   },
   planWorking: "Planning…",
   toolCall: "Tool call",

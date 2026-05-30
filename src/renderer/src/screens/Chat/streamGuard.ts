@@ -29,10 +29,14 @@ export function createStreamGuard(
     },
     acceptsSession(eventSessionId: string | undefined): boolean {
       if (!this.isActive()) return false;
-      const bound = getBoundSessionId();
       if (!eventSessionId) return true;
+      const bound = getBoundSessionId();
       if (!bound) return true;
-      return eventSessionId === bound;
+      if (eventSessionId === bound) return true;
+      // Gateway may replace desk-* with a canonical session id mid-stream
+      // (e.g. after context compression). Treat as the same conversation.
+      if (bound.startsWith("desk-")) return true;
+      return false;
     },
   };
 }

@@ -5,7 +5,6 @@ export default {
   auto: "自動",
   commandsTitle: "コマンド",
   typeMessage: "メッセージを入力...（Shift+Enter で改行）",
-  quickAskTitle: "Quick Ask (/btw) — 会話コンテキストに影響しないサイド質問",
   send: "送信",
   custom: "カスタム",
   typeModelName: "モデル名を入力...",

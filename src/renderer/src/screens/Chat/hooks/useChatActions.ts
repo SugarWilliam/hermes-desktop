@@ -41,14 +41,13 @@ interface UseChatActionsResult {
     skipLoadingCheck?: boolean,
     modeOverride?: ChatMode,
   ) => Promise<void>;
-  handleQuickAsk: (text: string, attachments?: Attachment[]) => Promise<void>;
   handleAbort: () => void;
   handleApprove: () => void;
   handleDeny: () => void;
 }
 
 /**
- * Encapsulates the chat's user-facing actions (send, quick-ask, abort,
+ * Encapsulates the chat's user-facing actions (send, abort,
  * approve, deny). All returned callbacks have stable identities so that
  * memoized children don't re-render on every streaming chunk — `messages`
  * and `isLoading` are read via live refs that update via `useEffect`.
@@ -173,17 +172,6 @@ export function useChatActions({
     [localCommands, pushUser, onSessionStarted, sendToAgent, setIsLoading, streamGuard],
   );
 
-  const handleQuickAsk = useCallback(
-    async (text: string, attachments?: Attachment[]): Promise<void> => {
-      if (!text || isLoadingRef.current) return;
-      streamGuard.claim();
-      setIsLoading(true);
-      pushUser(`💭 ${text}`, "user-btw", attachments);
-      await sendToAgent(`/btw ${text}`, attachments);
-    },
-    [pushUser, sendToAgent, setIsLoading, streamGuard],
-  );
-
   const handleAbort = useCallback(() => {
     streamGuard.invalidate();
     window.hermesAPI.abortChat();
@@ -207,5 +195,5 @@ export function useChatActions({
     sendToAgent("/deny").catch(() => setIsLoading(false));
   }, [chatInputRef, pushUser, sendToAgent, setIsLoading, streamGuard]);
 
-  return { handleSend, handleQuickAsk, handleAbort, handleApprove, handleDeny };
+  return { handleSend, handleAbort, handleApprove, handleDeny };
 }

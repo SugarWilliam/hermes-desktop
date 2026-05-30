@@ -1,5 +1,5 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
-import { randomBytes } from "crypto";
+import { randomBytes, randomUUID } from "crypto";
 import { join } from "path";
 import { HERMES_HOME, expectedEnvKeyForModel } from "./installer";
 import {
@@ -891,6 +891,34 @@ export function getApiServerKey(profile?: string): string {
   });
   setCache(cacheKey, value);
   return value;
+}
+
+/**
+ * Ensure `API_SERVER_KEY` exists in the profile/default `.env`.
+ * Returns the key (existing or newly generated). Desktop and gateway
+ * must share the same value or the api_server platform refuses to start.
+ */
+export function ensureApiServerKey(profile?: string): string {
+  const existing = getApiServerKey(profile);
+  if (existing) return existing;
+  const key = `desk-${randomUUID()}`;
+  setEnvValue("API_SERVER_KEY", key, profile);
+  setEnvValue("API_SERVER_KEY", key);
+  invalidateCache(`apiServerKey:${profile || "default"}`);
+  invalidateCache("apiServerKey:default");
+  return key;
+}
+
+/**
+ * Keep `.env` API_SERVER_KEY and `config.yaml` api_server.token aligned so
+ * the gateway process and desktop app use the same bearer secret.
+ */
+export function syncApiServerSecrets(profile?: string): string {
+  const key = ensureApiServerKey(profile);
+  if (!key) return "";
+  setConfigValue("api_server.token", key, profile);
+  setConfigValue("api_server.token", key);
+  return key;
 }
 
 /**

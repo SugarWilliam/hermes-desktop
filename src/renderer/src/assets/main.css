@@ -2093,6 +2093,17 @@ body.chat-split-resizing {
   padding: 0;
 }
 
+.chat-bubble-agent .chat-code-block code,
+.chat-bubble-agent .chat-code-block .token,
+.chat-bubble-agent .chat-code-block span {
+  background: none !important;
+  background-color: transparent !important;
+  box-shadow: none !important;
+  text-shadow: none !important;
+  padding: 0;
+  border-radius: 0;
+}
+
 .chat-code-block {
   border-radius: 6px;
   overflow: hidden;
@@ -2441,25 +2452,6 @@ body.chat-split-resizing {
 
 .chat-stop-btn:hover {
   background: #dc2626;
-}
-
-.chat-btw-btn {
-  width: 34px;
-  height: 34px;
-  border-radius: var(--radius-sm);
-  background: var(--bg-hover);
-  border: none;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  font-size: 16px;
-  transition: background var(--transition);
-}
-
-.chat-btw-btn:hover {
-  background: var(--bg-active);
 }
 
 /* ── Attachments ────────────────────────────────────── */

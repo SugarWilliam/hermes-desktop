@@ -45,6 +45,8 @@ function Layout({
   const [view, setView] = useState<View>("chat");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  /** Bumps on new chat / resume — not when the gateway re-keys the same conversation. */
+  const [chatConversationKey, setChatConversationKey] = useState(0);
   const [activeProfile, setActiveProfile] = useState("default");
   // Tabs lazy-mount on first visit, then stay mounted (display:none toggle).
   // Keeps IPC refetch / DOM rebuild off the tab-switch hot path.
@@ -131,6 +133,7 @@ function Layout({
     window.hermesAPI.abortChat();
     setMessages([]);
     setCurrentSessionId(null);
+    setChatConversationKey((k) => k + 1);
     goTo("chat");
   }, [goTo]);
 
@@ -153,6 +156,7 @@ function Layout({
     setActiveProfile(name);
     setMessages([]);
     setCurrentSessionId(null);
+    setChatConversationKey((k) => k + 1);
   }, []);
 
   const handleResumeSession = useCallback(
@@ -163,6 +167,7 @@ function Layout({
       )) as DbHistoryItem[];
       setMessages(dbItemsToChatMessages(items));
       setCurrentSessionId(sessionId);
+      setChatConversationKey((k) => k + 1);
       goTo("chat");
     },
     [goTo],
@@ -293,6 +298,7 @@ function Layout({
             messages={messages}
             setMessages={setMessages}
             sessionId={currentSessionId}
+            conversationKey={chatConversationKey}
             profile={activeProfile}
             onSessionIdChange={setCurrentSessionId}
             onNewChat={handleNewChat}

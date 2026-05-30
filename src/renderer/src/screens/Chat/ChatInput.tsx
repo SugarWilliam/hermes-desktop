@@ -56,29 +56,31 @@ export interface ChatInputHandle {
   addFiles(files: File[] | FileList): Promise<AttachmentError[]>;
 }
 
+/** Called when an attachment is bound to a filesystem path (picker, drop, workspace). */
+export type OnAttachmentPath = (absolutePath: string) => void;
+
 interface ChatInputProps {
   isLoading: boolean;
-  hasSession: boolean;
   /** Layout session id — changes when user opens another saved chat. */
   conversationKey?: string | null;
   sessionId?: string | null;
   remoteMode?: boolean;
   onSubmit: (text: string, attachments: Attachment[]) => void;
-  onQuickAsk: (text: string, attachments: Attachment[]) => void;
   onAbort: () => void;
+  /** Bind workspace context to the parent folder of attached files. */
+  onAttachmentPath?: OnAttachmentPath;
 }
 
 export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
   function ChatInput(
     {
       isLoading,
-      hasSession,
       conversationKey,
       sessionId,
       remoteMode,
       onSubmit,
-      onQuickAsk,
       onAbort,
+      onAttachmentPath,
     },
     ref,
   ): React.JSX.Element {
@@ -148,6 +150,9 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
           },
         );
         if (added.length > 0) {
+          for (const att of added) {
+            if (att.path) onAttachmentPath?.(att.path);
+          }
           setAttachments((prev) => [...prev, ...added]);
         }
         if (errors.length > 0) {
@@ -157,7 +162,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
         }
         return errors;
       },
-      [attachments.length, formatError, sessionId, remoteMode],
+      [attachments.length, formatError, sessionId, remoteMode, onAttachmentPath],
     );
 
     useImperativeHandle(
@@ -220,6 +225,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
                       : content,
                     path: absolutePath,
                   };
+                  onAttachmentPath?.(absolutePath);
                   return [...prev, att];
                 });
                 setAttachmentError(null);
@@ -240,6 +246,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
                 size: 0,
                 path: absolutePath,
               };
+              onAttachmentPath?.(absolutePath);
               return [...prev, att];
             });
             setAttachmentError(null);
@@ -261,7 +268,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
           return ingestFiles(files);
         },
       }),
-      [autoResize, ingestFiles],
+      [autoResize, ingestFiles, onAttachmentPath],
     );
 
     // Clear draft and attachments when switching to another saved session.
@@ -337,14 +344,6 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       const sendAttachments = attachments;
       clearAfterSend(text);
       onSubmit(text, sendAttachments);
-    }
-
-    function handleQuickAsk(): void {
-      const text = input.trim();
-      if (!text) return;
-      const sendAttachments = attachments;
-      clearAfterSend(text);
-      onQuickAsk(text, sendAttachments);
     }
 
     function handleSlashSelect(cmd: SlashCommand): void {
@@ -539,25 +538,14 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
               <Stop size={14} />
             </button>
           ) : (
-            <>
-              {input.trim() && hasSession && (
-                <button
-                  className="chat-btw-btn"
-                  onClick={handleQuickAsk}
-                  title={t("chat.quickAskTitle")}
-                >
-                  💭
-                </button>
-              )}
-              <button
-                className="chat-send-btn"
-                onClick={handleSend}
-                disabled={!canSend}
-                title={t("chat.send")}
-              >
-                <Send size={16} />
-              </button>
-            </>
+            <button
+              className="chat-send-btn"
+              onClick={handleSend}
+              disabled={!canSend}
+              title={t("chat.send")}
+            >
+              <Send size={16} />
+            </button>
           )}
         </div>
       </>

@@ -27,6 +27,7 @@ interface UseChatIPCArgs {
   setIsLoading: (loading: boolean) => void;
   setUsage: React.Dispatch<React.SetStateAction<UsageState | null>>;
   streamGuard: StreamGuard;
+  bindSessionId?: (sessionId: string) => void;
 }
 
 /**
@@ -46,6 +47,7 @@ export function useChatIPC({
   setIsLoading,
   setUsage,
   streamGuard,
+  bindSessionId,
 }: UseChatIPCArgs): void {
   const { t } = useI18n();
   useEffect(() => {
@@ -74,6 +76,7 @@ export function useChatIPC({
 
     const cleanupSessionId = window.hermesAPI.onChatSessionId((sid) => {
       if (!sid || !streamGuard.isActive()) return;
+      bindSessionId?.(sid);
       setHermesSessionId(sid);
     });
 
@@ -108,7 +111,10 @@ export function useChatIPC({
 
     const cleanupDone = window.hermesAPI.onChatDone(async (sessionId) => {
       if (!streamGuard.acceptsSession(sessionId || undefined)) return;
-      if (sessionId) setHermesSessionId(sessionId);
+      if (sessionId) {
+        bindSessionId?.(sessionId);
+        setHermesSessionId(sessionId);
+      }
       setToolProgress(null);
       setToolProgressLog([]);
       setIsLoading(false);
@@ -134,10 +140,17 @@ export function useChatIPC({
     const cleanupError = window.hermesAPI.onChatError((payload) => {
       if (!streamGuard.isActive()) return;
       const { error, sessionId: errSessionId } = parseChatErrorPayload(payload);
+      if (errSessionId) {
+        bindSessionId?.(errSessionId);
+        setHermesSessionId(errSessionId);
+      }
       const display = enrichChatErrorMessage(error, {
         codexTtfb: t("chat.phase.codexTtfbHint"),
         contextLength: t("chat.phase.contextLengthHint"),
         agentIdle: t("chat.phase.agentIdleHint"),
+        sessionNotFound: t("chat.phase.sessionNotFoundHint"),
+        apiServerKey: t("chat.phase.apiServerKeyHint"),
+        gatewayApiUnavailable: t("chat.phase.gatewayApiUnavailableHint"),
       });
       setMessages((prev) => [
         ...prev,
@@ -206,6 +219,7 @@ export function useChatIPC({
     setIsLoading,
     setUsage,
     streamGuard,
+    bindSessionId,
     t,
   ]);
 }

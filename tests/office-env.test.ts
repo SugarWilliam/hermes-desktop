@@ -59,4 +59,15 @@ describe("buildOfficeEnv (issue #256)", () => {
     expect(env).toContain("CLAW3D_GATEWAY_TOKEN=");
     expect(env).toContain("HERMES_API_KEY=");
   });
+
+  it("writes OPENCLAW_STATE_DIR for hermes-office task store", () => {
+    const env = buildOfficeEnv({
+      port: 3000,
+      url: "ws://x",
+      apiKey: "k",
+      model: "hermes",
+      openClawStateDir: "/tmp/hermes-openclaw-test",
+    });
+    expect(env).toContain("OPENCLAW_STATE_DIR=/tmp/hermes-openclaw-test");
+  });
 });

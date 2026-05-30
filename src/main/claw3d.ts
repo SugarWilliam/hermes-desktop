@@ -5,6 +5,8 @@ import {
   readdirSync,
   unlinkSync,
   mkdirSync,
+  lstatSync,
+  writeFileSync,
 } from "fs";
 import { join, win32 } from "path";
 import { homedir } from "os";
@@ -22,7 +24,8 @@ const PORT_FILE = join(HERMES_HOME, "claw3d-port");
 const WS_URL_FILE = join(HERMES_HOME, "claw3d-ws-url");
 const DEFAULT_PORT = 3000;
 const DEFAULT_WS_URL = "ws://localhost:18789";
-const CLAW3D_SETTINGS_DIR = join(homedir(), ".openclaw", "claw3d");
+const HOME_OPENCLAW_DIR = join(homedir(), ".openclaw");
+const FALLBACK_OPENCLAW_STATE_DIR = join(HERMES_HOME, "openclaw-state");
 
 let devServerProcess: ChildProcess | null = null;
 let adapterProcess: ChildProcess | null = null;
@@ -265,8 +268,9 @@ export function buildOfficeEnv(opts: {
   url: string;
   apiKey: string;
   model: string;
+  openClawStateDir?: string;
 }): string {
-  return [
+  const lines = [
     "# Auto-configured by Hermes Desktop",
     `PORT=${opts.port}`,
     `HOST=127.0.0.1`,
@@ -277,8 +281,78 @@ export function buildOfficeEnv(opts: {
     `HERMES_ADAPTER_PORT=18789`,
     `HERMES_MODEL=${opts.model || "hermes"}`,
     `HERMES_AGENT_NAME=Hermes`,
-    "",
-  ].join("\n");
+  ];
+  if (opts.openClawStateDir) {
+    lines.push(`OPENCLAW_STATE_DIR=${opts.openClawStateDir}`);
+  }
+  lines.push("");
+  return lines.join("\n");
+}
+
+/** True when `dir` exists and is a writable directory (not a file/symlink to blocked path). */
+export function isWritableOpenClawStateDir(dir: string): boolean {
+  try {
+    if (existsSync(dir)) {
+      if (!lstatSync(dir).isDirectory()) return false;
+    }
+    const taskDir = join(dir, "claw3d", "task-manager");
+    mkdirSync(taskDir, { recursive: true });
+    const probe = join(taskDir, ".hermes-write-probe");
+    writeFileSync(probe, "");
+    unlinkSync(probe);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Prefer ~/.openclaw; fall back to %LOCALAPPDATA%/hermes/openclaw-state on EPERM. */
+export function resolveOpenClawStateDir(): string {
+  if (isWritableOpenClawStateDir(HOME_OPENCLAW_DIR)) {
+    return HOME_OPENCLAW_DIR;
+  }
+  return FALLBACK_OPENCLAW_STATE_DIR;
+}
+
+export type EnsureClaw3dDataDirsResult = {
+  ok: boolean;
+  stateDir: string;
+  error?: string;
+};
+
+/**
+ * Pre-create Claw3D task store paths before the Next.js server handles API
+ * requests (avoids EPERM on Windows when ~/.openclaw is missing or blocked).
+ */
+export function ensureClaw3dDataDirs(): EnsureClaw3dDataDirsResult {
+  const stateDir = resolveOpenClawStateDir();
+  const taskDir = join(stateDir, "claw3d", "task-manager");
+  const tasksPath = join(taskDir, "tasks.json");
+  try {
+    mkdirSync(taskDir, { recursive: true });
+    if (!existsSync(tasksPath)) {
+      safeWriteFile(
+        tasksPath,
+        JSON.stringify(
+          {
+            schemaVersion: 1,
+            updatedAt: new Date(0).toISOString(),
+            tasks: [],
+          },
+          null,
+          2,
+        ),
+      );
+    }
+    return { ok: true, stateDir };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return {
+      ok: false,
+      stateDir,
+      error: `Cannot create Claw3D data directory (${taskDir}): ${message}`,
+    };
+  }
 }
 
 /**
@@ -289,11 +363,13 @@ function writeClaw3dSettings(wsUrl?: string): void {
   const url = wsUrl || getSavedWsUrl();
   // Gateway bearer token — empty string when the gateway has no API_SERVER_KEY.
   const apiKey = getApiServerKey();
+  const ensured = ensureClaw3dDataDirs();
+  const settingsDir = join(ensured.stateDir, "claw3d");
 
-  // Write ~/.openclaw/claw3d/settings.json
+  // Write <state-dir>/claw3d/settings.json
   try {
-    mkdirSync(CLAW3D_SETTINGS_DIR, { recursive: true });
-    const settingsPath = join(CLAW3D_SETTINGS_DIR, "settings.json");
+    mkdirSync(settingsDir, { recursive: true });
+    const settingsPath = join(settingsDir, "settings.json");
 
     // Preserve existing settings if present
     let existing: Record<string, unknown> = {};
@@ -325,6 +401,7 @@ function writeClaw3dSettings(wsUrl?: string): void {
           url,
           apiKey,
           model: resolveOfficeModel(),
+          openClawStateDir: ensured.stateDir,
         }),
       );
     }
@@ -729,6 +806,12 @@ export function startDevServer(): boolean {
 
   devServerError = "";
   devServerLogs = "";
+  const ensured = ensureClaw3dDataDirs();
+  if (!ensured.ok) {
+    devServerError = ensured.error || "Cannot create Claw3D data directory";
+    return false;
+  }
+
   const port = getSavedPort();
   const env = {
     ...process.env,
@@ -737,6 +820,7 @@ export function startDevServer(): boolean {
     TERM: "dumb",
     HERMES_API_KEY: getApiServerKey(),
     PORT: String(port),
+    OPENCLAW_STATE_DIR: ensured.stateDir,
   };
   const node = resolveCommand("node", env.PATH);
   const devScript = createClaw3dScriptInvocation("dev", node.command);
@@ -810,6 +894,11 @@ export function startAdapter(): boolean {
 
   adapterError = "";
   adapterLogs = "";
+  const ensured = ensureClaw3dDataDirs();
+  if (!ensured.ok) {
+    adapterError = ensured.error || "Cannot create Claw3D data directory";
+    return false;
+  }
   // The hermes-gateway-adapter authenticates to the Hermes gateway with
   // `Authorization: Bearer ${HERMES_API_KEY}`. Without it, a gateway that
   // has an API_SERVER_KEY configured rejects the Office chat with HTTP 401.
@@ -819,6 +908,7 @@ export function startAdapter(): boolean {
     HOME: homedir(),
     TERM: "dumb",
     HERMES_API_KEY: getApiServerKey(),
+    OPENCLAW_STATE_DIR: ensured.stateDir,
   };
   const node = resolveCommand("node", env.PATH);
   const adapterScript = createClaw3dScriptInvocation(
@@ -897,9 +987,14 @@ export function startAll(): { success: boolean; error?: string } {
 
   const port = getSavedPort();
 
-  // Refresh the `.env` before the processes read it, so Office always
-  // starts against the current port/URL and the desktop's configured
-  // model rather than a value frozen at first setup (issue #256).
+  // Refresh dirs + `.env` before the processes read it.
+  const ensured = ensureClaw3dDataDirs();
+  if (!ensured.ok) {
+    return {
+      success: false,
+      error: ensured.error || "Cannot create Claw3D data directory",
+    };
+  }
   writeClaw3dSettings();
 
   // Start dev server

@@ -1,18 +1,22 @@
 import { memo, useEffect, useState } from "react";
 import { AgentMarkdown } from "../../components/AgentMarkdown";
+import {
+  inferFenceLanguage,
+  langCssClass,
+} from "../../../../shared/markdownCodeStyle";
+import {
+  PRISM_BLOCK_OPTIONS,
+  PRISM_BLOCK_STYLE,
+  prismCodeTagProps,
+} from "../../components/MarkdownPrism";
 import { parseThinkingContent } from "./parseThinkingContent";
 
 let _highlighterMod: typeof import("react-syntax-highlighter") | null = null;
-let _oneDark: Record<string, React.CSSProperties> | null = null;
 
 function loadHighlighter(): Promise<void> {
-  if (_highlighterMod && _oneDark) return Promise.resolve();
-  return Promise.all([
-    import("react-syntax-highlighter"),
-    import("react-syntax-highlighter/dist/esm/styles/prism/one-dark"),
-  ]).then(([mod, style]) => {
+  if (_highlighterMod) return Promise.resolve();
+  return import("react-syntax-highlighter").then((mod) => {
     _highlighterMod = mod;
-    _oneDark = style.default;
   });
 }
 
@@ -29,9 +33,9 @@ function ThinkingCodeBlock({
   added?: number;
   removed?: number;
 }): React.JSX.Element {
-  const [ready, setReady] = useState(
-    () => _highlighterMod !== null && _oneDark !== null,
-  );
+  const [ready, setReady] = useState(() => _highlighterMod !== null);
+  const prismLang = inferFenceLanguage(code, language);
+  const langClass = langCssClass(prismLang);
 
   useEffect(() => {
     if (!ready) void loadHighlighter().then(() => setReady(true));
@@ -40,9 +44,11 @@ function ThinkingCodeBlock({
   const displayName = file || language || "code";
 
   return (
-    <div className="thinking-code-block">
-      <div className="thinking-code-header">
-        <span className="thinking-code-file"># {displayName}</span>
+    <div className={`thinking-code-block chat-code-block ${langClass}`}>
+      <div className="thinking-code-header chat-code-header">
+        <span className={`thinking-code-file chat-code-lang ${langClass}`}>
+          # {displayName}
+        </span>
         <span className="thinking-code-stats">
           {added != null && (
             <span className="thinking-stat thinking-stat--add">+{added}</span>
@@ -53,11 +59,13 @@ function ThinkingCodeBlock({
         </span>
       </div>
       <div className="thinking-code-body">
-        {ready && _highlighterMod && _oneDark ? (
+        {ready && _highlighterMod ? (
           <_highlighterMod.Prism
-            style={_oneDark}
-            language={language || "text"}
+            style={PRISM_BLOCK_STYLE}
+            language={prismLang}
             PreTag="div"
+            codeTagProps={prismCodeTagProps(prismLang)}
+            {...PRISM_BLOCK_OPTIONS}
             customStyle={{
               margin: 0,
               padding: "10px 12px",

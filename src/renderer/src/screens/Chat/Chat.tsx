@@ -6,6 +6,10 @@ import {
   shouldSuggestPlanMode,
   type ChatMode,
 } from "../../../../shared/chatMode";
+import {
+  parentDirectory,
+  resolvePathUnderRoot,
+} from "../../../../shared/pathUtils";
 import { ChatInput, type ChatInputHandle } from "./ChatInput";
 import { ChatHeader } from "./ChatHeader";
 import { WorkspacePanel } from "./WorkspacePanel";
@@ -40,6 +44,8 @@ interface ChatProps {
   messages: ChatMessage[];
   setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
   sessionId: string | null;
+  /** Layout-owned key; changes only on new chat / resume, not gateway session re-key. */
+  conversationKey: number;
   profile?: string;
   onSessionIdChange?: (sessionId: string) => void;
   onSessionStarted?: () => void;
@@ -50,6 +56,7 @@ function Chat({
   messages,
   setMessages,
   sessionId,
+  conversationKey,
   profile,
   onSessionIdChange,
   onSessionStarted,
@@ -75,7 +82,7 @@ function Chat({
     } catch {
       /* ignore */
     }
-    return "chat";
+    return "agent";
   });
   const [planSuggestion, setPlanSuggestion] = useState<string | null>(null);
   const [workspaceOpen, setWorkspaceOpen] = useState(false);
@@ -137,6 +144,7 @@ function Chat({
     setIsLoading,
     setUsage,
     streamGuard,
+    bindSessionId,
   });
 
   useLiveSessionSync({
@@ -170,24 +178,28 @@ function Chat({
     }
   }, [messages]);
 
-  // When the parent swaps to a different session, sync local state to it:
-  // the gateway session id (a stale one resumes/deletes the WRONG session —
-  // issue #276) and the per-conversation context folder (issue #27). Chat is
-  // not remounted on session switch, so this must be done explicitly.
+  // Reset per-conversation UI when the user opens a new chat or resumes another
+  // session. Do NOT key this on `sessionId` alone — the gateway may re-key the
+  // same turn (desk-* → timestamp id after compression) and that must not
+  // clear the workspace or abort the stream.
   useEffect(() => {
-    if (sessionId === hermesSessionIdRef.current) return;
-    // Parent caught up to a session we already claimed mid-stream — do not abort.
-    if (isLoading && sessionId && !hermesSessionIdRef.current) {
-      hermesSessionIdRef.current = sessionId;
-      setHermesSessionId(sessionId);
-      return;
-    }
     resetTransientChatState();
     setHermesSessionId(sessionId);
+    hermesSessionIdRef.current = sessionId;
     setContextFolder(null);
     queueRef.current = [];
     setQueuedCount(0);
-  }, [sessionId, resetTransientChatState, isLoading]);
+    // conversationKey only — not sessionId (gateway re-key must not re-run this).
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- sessionId is read from the render when conversationKey changes.
+  }, [conversationKey, resetTransientChatState]);
+
+  // Keep gateway session id in sync when the parent list highlights a new id
+  // for the same conversation (desk-* → canonical id after compression).
+  useEffect(() => {
+    if (!sessionId || sessionId === hermesSessionIdRef.current) return;
+    bindSessionId(sessionId);
+    setHermesSessionId(sessionId);
+  }, [sessionId, bindSessionId]);
 
   // Cmd/Ctrl+N → new chat
   useEffect(() => {
@@ -365,10 +377,26 @@ function Chat({
     [isLoading, chatMode, planSuggestion],
   );
 
-  const handleAddFileRef = useCallback((absolutePath: string) => {
-    chatInputRef.current?.addPathRef(absolutePath);
-    chatInputRef.current?.focus();
-  }, []);
+  const bindContextFromAttachmentPath = useCallback(
+    (filePath: string) => {
+      if (remoteMode) return;
+      const resolved = resolvePathUnderRoot(filePath, contextFolder);
+      const parent = parentDirectory(resolved);
+      if (parent) setContextFolder((prev) => prev ?? parent);
+      else if (contextFolder) setContextFolder((prev) => prev ?? contextFolder);
+    },
+    [remoteMode, contextFolder],
+  );
+
+  const handleAddFileRef = useCallback(
+    (filePath: string) => {
+      const resolved = resolvePathUnderRoot(filePath, contextFolder);
+      bindContextFromAttachmentPath(resolved);
+      chatInputRef.current?.addPathRef(resolved);
+      chatInputRef.current?.focus();
+    },
+    [bindContextFromAttachmentPath, contextFolder],
+  );
 
   const handleAppendReference = useCallback((line: string) => {
     chatInputRef.current?.appendReference(line);
@@ -450,9 +478,13 @@ function Chat({
       setDragActive(false);
       const files = Array.from(e.dataTransfer.files);
       if (files.length === 0) return;
+      for (const file of files) {
+        const path = (file as File & { path?: string }).path;
+        if (path) bindContextFromAttachmentPath(path);
+      }
       void chatInputRef.current?.addFiles(files);
     },
-    [eventHasFiles],
+    [eventHasFiles, bindContextFromAttachmentPath],
   );
 
   return (
@@ -553,13 +585,12 @@ function Chat({
         <ChatInput
           ref={chatInputRef}
           isLoading={isLoading}
-          hasSession={!!hermesSessionId}
-          conversationKey={sessionId}
+          conversationKey={String(conversationKey)}
           sessionId={hermesSessionId}
           remoteMode={remoteMode}
           onSubmit={handleSubmitOrQueue}
-          onQuickAsk={actions.handleQuickAsk}
           onAbort={handleAbort}
+          onAttachmentPath={bindContextFromAttachmentPath}
         />
         <div className="chat-input-footer">
           <ChatModeSelect

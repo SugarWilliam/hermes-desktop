@@ -5,7 +5,6 @@ export default {
   auto: "自动",
   commandsTitle: "命令",
   typeMessage: "输入消息...（Shift+Enter 换行）",
-  quickAskTitle: "快速提问（/btw）—— 不会影响当前对话上下文的旁支问题",
   send: "发送",
   custom: "自定义",
   typeModelName: "输入模型名称...",
@@ -48,6 +47,12 @@ export default {
       "会话上下文已满，自动压缩无法继续缩减。请尝试：① 新建聊天（Cmd/Ctrl+N 或输入 /new）；② 发送 /compress 或 /compact 手动压缩历史；③ 减少 @file 大附件；④ 换用上下文更大的模型；⑤ 若首轮长对话就报错，在 ~/.hermes/config.yaml 中设置 model.context_length。",
     agentIdleHint:
       "Gateway 在数分钟内未返回任何流式数据（常见于大仓库扫描或工具循环）。请尝试：① 在同一会话发送更短的续问以恢复；② 设置 → 运行诊断，确认 Gateway 在运行；③ 重启 Gateway 或更换模型/Provider；④ 将任务拆成多步，避免一次塞入超大分析请求。",
+    sessionNotFoundHint:
+      "桌面会话 ID（desk-…）只能通过 Gateway HTTP API 使用。请打开 设置 → 生成 API 密钥并重启 Gateway，不要依赖 CLI 回退；或新建聊天后重试。",
+    apiServerKeyHint:
+      "在 %LOCALAPPDATA%\\hermes\\.env 中配置 API_SERVER_KEY，或在 设置 中点击生成 API 密钥，然后重启 Gateway。未配置时 api_server 无法监听 127.0.0.1:8642，附件与 Agent 模式将无法工作。",
+    gatewayApiUnavailableHint:
+      "Gateway 日志若已显示 api_server listening on 127.0.0.1:8642，请：① 设置 → 连接 确认为「本地」模式；② 设置 → Gateway → 重启；③ 新建会话后重试（勿在 Gateway 刚启动的 2 秒内发送）；④ 确认桌面端与 Gateway 使用同一 %LOCALAPPDATA%\\hermes 配置目录下的 API_SERVER_KEY。",
   },
   planWorking: "正在规划…",
   toolCall: "工具调用",

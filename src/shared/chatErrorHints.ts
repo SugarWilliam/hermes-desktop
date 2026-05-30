@@ -7,6 +7,9 @@ export function enrichChatErrorMessage(
     codexTtfb?: string;
     contextLength?: string;
     agentIdle?: string;
+    sessionNotFound?: string;
+    apiServerKey?: string;
+    gatewayApiUnavailable?: string;
   },
 ): string {
   const lower = error.toLowerCase();
@@ -32,6 +35,25 @@ export function enrichChatErrorMessage(
     (lower.includes("no output for") && lower.includes("minute"))
   ) {
     const hint = hints.agentIdle;
+    return hint ? `${error}\n\n${hint}` : error;
+  }
+  if (lower.includes("session not found")) {
+    const hint = hints.sessionNotFound;
+    return hint ? `${error}\n\n${hint}` : error;
+  }
+  if (
+    lower.includes("api_server_key is required") ||
+    lower.includes("api_server_key is not configured") ||
+    (lower.includes("api server") && lower.includes("refusing to start"))
+  ) {
+    const hint = hints.apiServerKey;
+    return hint ? `${error}\n\n${hint}` : error;
+  }
+  if (
+    lower.includes("gateway api is unavailable") ||
+    lower.includes("gateway api health check failed")
+  ) {
+    const hint = hints.gatewayApiUnavailable ?? hints.apiServerKey;
     return hint ? `${error}\n\n${hint}` : error;
   }
   return error;

@@ -5,6 +5,9 @@ const HINTS = {
   codexTtfb: "CODEX_HINT",
   contextLength: "CTX_HINT",
   agentIdle: "IDLE_HINT",
+  sessionNotFound: "SESSION_HINT",
+  apiServerKey: "API_KEY_HINT",
+  gatewayApiUnavailable: "GW_HINT",
 };
 
 describe("enrichChatErrorMessage", () => {
@@ -33,5 +36,26 @@ describe("enrichChatErrorMessage", () => {
 
   it("leaves unrelated errors unchanged", () => {
     expect(enrichChatErrorMessage("network down", HINTS)).toBe("network down");
+  });
+
+  it("appends hint for session not found", () => {
+    const msg =
+      "Session not found: desk-1780106314408-65a66ba6-fdb1-47da-867d-18c0a9316f8f";
+    const out = enrichChatErrorMessage(msg, HINTS);
+    expect(out).toContain("SESSION_HINT");
+  });
+
+  it("appends hint for missing API_SERVER_KEY", () => {
+    const msg =
+      "Gateway API is unavailable: API_SERVER_KEY is not configured.";
+    const out = enrichChatErrorMessage(msg, HINTS);
+    expect(out).toContain("API_KEY_HINT");
+  });
+
+  it("appends hint when gateway api is unavailable", () => {
+    const msg =
+      "Gateway API is unavailable. Restart Gateway (Settings → Gateway) and retry.";
+    const out = enrichChatErrorMessage(msg, HINTS);
+    expect(out).toContain("GW_HINT");
   });
 });

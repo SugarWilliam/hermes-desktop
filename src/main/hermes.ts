@@ -6,11 +6,13 @@ import {
   chatModeCliPrefix,
   chatModeSystemMessage,
 } from "../shared/chatMode";
+import { cliResumeSessionId, isDesktopSessionId } from "../shared/sessionIds";
 import { attachmentFocusDirective } from "../shared/attachmentContext";
 import { inlinePathRefAttachments } from "./inlinePathRefs";
 import { expandWorkspaceMessage } from "./expandWorkspaceMessage";
 import { join } from "path";
 import { homedir } from "os";
+import { createConnection } from "net";
 import http from "http";
 import https from "https";
 import {
@@ -25,6 +27,7 @@ import {
   getConnectionConfig,
   getModelConfig,
   readEnv,
+  syncApiServerSecrets,
 } from "./config";
 import {
   getSshTunnelUrl,
@@ -36,6 +39,7 @@ import { pidIsAliveAs, stripAnsi } from "./utils";
 import { readModels } from "./models";
 import { HIDDEN_SUBPROCESS_OPTIONS } from "./process-options";
 import { type Attachment, escapeXmlAttr } from "../shared/attachments";
+import { buildApiHealthHeaders } from "../shared/apiHealthHeaders";
 
 const LOCAL_API_URL = "http://127.0.0.1:8642";
 
@@ -194,15 +198,52 @@ interface ChatHandle {
 //  API Server health check
 // ────────────────────────────────────────────────────
 
-function isApiServerReady(): Promise<boolean> {
+/** Headers for /health — local mode must send the same Bearer as chat requests. */
+export function getApiHealthHeaders(profile?: string): Record<string, string> {
+  const conn = getConnectionConfig();
+  return buildApiHealthHeaders({
+    mode: conn.mode,
+    apiServerKey: getApiServerKey(profile),
+    remoteApiKey: conn.apiKey,
+    sshApiKey: _sshRemoteApiKey,
+  });
+}
+
+export function resetApiServerAvailability(): void {
+  apiServerAvailable = null;
+}
+
+const API_HEALTH_PATHS = ["/health", "/v1/health"];
+
+export function isHttpHealthOk(statusCode: number | undefined): boolean {
+  return typeof statusCode === "number" && statusCode >= 200 && statusCode < 300;
+}
+
+function parseApiHostPort(baseUrl: string): { host: string; port: number } {
+  try {
+    const u = new URL(baseUrl);
+    return {
+      host: u.hostname || "127.0.0.1",
+      port: u.port ? parseInt(u.port, 10) : u.protocol === "https:" ? 443 : 80,
+    };
+  } catch {
+    return { host: "127.0.0.1", port: 8642 };
+  }
+}
+
+function httpGetOk(
+  path: string,
+  headers: Record<string, string>,
+): Promise<boolean> {
   return new Promise((resolve) => {
-    const url = `${getApiUrl()}/health`;
-    const mod = url.startsWith("https") ? https : http;
+    const base = getApiUrl().replace(/\/+$/, "");
+    const target = `${base}${path.startsWith("/") ? path : `/${path}`}`;
+    const mod = target.startsWith("https") ? https : http;
     const req = mod.request(
-      url,
-      { method: "GET", timeout: 1500, headers: getRemoteAuthHeader() },
+      target,
+      { method: "GET", timeout: 4000, headers },
       (res) => {
-        resolve(res.statusCode === 200);
+        resolve(isHttpHealthOk(res.statusCode));
         res.resume();
       },
     );
@@ -213,6 +254,49 @@ function isApiServerReady(): Promise<boolean> {
     });
     req.end();
   });
+}
+
+function isApiPortOpen(): Promise<boolean> {
+  const { host, port } = parseApiHostPort(getApiUrl());
+  return new Promise((resolve) => {
+    const socket = createConnection({ host, port });
+    const done = (ok: boolean): void => {
+      socket.removeAllListeners();
+      try {
+        socket.destroy();
+      } catch {
+        /* ignore */
+      }
+      resolve(ok);
+    };
+    socket.setTimeout(2000);
+    socket.on("connect", () => done(true));
+    socket.on("error", () => done(false));
+    socket.on("timeout", () => done(false));
+  });
+}
+
+async function isApiServerReady(profile?: string): Promise<boolean> {
+  const authHeaders = getApiHealthHeaders(profile);
+  for (const path of API_HEALTH_PATHS) {
+    if (await httpGetOk(path, {})) return true;
+    if (await httpGetOk(path, authHeaders)) return true;
+  }
+  if (isGatewayRunning() && (await isApiPortOpen())) {
+    return true;
+  }
+  return false;
+}
+
+async function waitForApiServerReady(profile?: string): Promise<boolean> {
+  const attempts = isGatewayRunning() ? 10 : 3;
+  for (let i = 0; i < attempts; i++) {
+    if (await isApiServerReady(profile)) return true;
+    if (i < attempts - 1) {
+      await new Promise<void>((r) => setTimeout(r, 500 * (i + 1)));
+    }
+  }
+  return false;
 }
 
 // ────────────────────────────────────────────────────
@@ -819,8 +903,9 @@ function sendMessageViaCli(
   }
   args.push("chat", "-q", message, "-Q", "--source", "desktop");
 
-  if (resumeSessionId) {
-    args.push("--resume", resumeSessionId);
+  const cliResume = cliResumeSessionId(resumeSessionId);
+  if (cliResume) {
+    args.push("--resume", cliResume);
   }
 
   if (mc.model) {
@@ -1069,9 +1154,21 @@ export async function sendMessage(
     );
   }
 
-  // Check API server availability (cache the result, re-check periodically)
-  if (apiServerAvailable === null || apiServerAvailable === false) {
-    apiServerAvailable = await isApiServerReady();
+  // Local mode: sync secrets and probe API (always re-probe when gateway is up).
+  if (!isRemoteMode()) {
+    const hadKey = getApiServerKey(profile).length > 0;
+    syncApiServerSecrets(profile);
+    if (!hadKey && isGatewayRunning()) {
+      restartGateway(profile);
+    }
+    if (isGatewayRunning()) {
+      resetApiServerAvailability();
+    }
+    if (apiServerAvailable === null || apiServerAvailable === false) {
+      apiServerAvailable = await waitForApiServerReady(profile);
+    }
+  } else if (apiServerAvailable === null || apiServerAvailable === false) {
+    apiServerAvailable = await waitForApiServerReady(profile);
   }
 
   if (apiServerAvailable) {
@@ -1087,7 +1184,23 @@ export async function sendMessage(
     );
   }
 
-  // Fallback to CLI
+  // Desktop pre-allocates `desk-*` session ids for the HTTP API. CLI fallback
+  // cannot resume them — surface a clear error instead of "Session not found".
+  if (isDesktopSessionId(resumeSessionId)) {
+    const keyMissing = getApiServerKey(profile).length === 0;
+    const gwRunning = isGatewayRunning();
+    const portOpen = gwRunning ? await isApiPortOpen() : false;
+    cb.onError(
+      keyMissing
+        ? "Gateway API is unavailable: API_SERVER_KEY is not configured. Open Settings → generate an API server key, restart Gateway, then retry."
+        : gwRunning && portOpen
+          ? "Gateway API health check failed but port 8642 is open. In Settings → Connection choose Local, then Settings → Gateway → Restart, wait 3 seconds, start a new chat (Cmd/Ctrl+N), and retry."
+          : "Gateway API is unavailable. Restart Gateway (Settings → Gateway) and retry. Desktop attachments and agent mode require the HTTP API, not CLI fallback.",
+    );
+    return { abort: () => {} };
+  }
+
+  // Fallback to CLI (no desktop session resume)
   return sendMessageViaCli(
     message,
     cb,
@@ -1107,6 +1220,11 @@ function ensureInitialized(): void {
   _initialized = true;
   if (!isRemoteMode()) {
     ensureApiServerConfig();
+    const hadKey = getApiServerKey().length > 0;
+    syncApiServerSecrets();
+    if (!hadKey && isGatewayRunning()) {
+      restartGateway();
+    }
   }
   startHealthPolling();
 }
@@ -1291,6 +1409,7 @@ export function restartGateway(profile?: string): void {
   // in remote/SSH mode.  Cheap to check; catches IPC paths that don't
   // wrap their restart calls in an isRemoteMode() check.
   if (isRemoteMode()) return;
+  resetApiServerAvailability();
   if (!gatewayStartedByApp && !isGatewayRunning()) return;
   stopGateway(true);
   setTimeout(() => {
