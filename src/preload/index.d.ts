@@ -256,9 +256,7 @@ interface HermesAPI {
   ) => Promise<Array<{ name: string; path: string; isDirectory: boolean }>>;
   workspaceGitStatus: (
     root: string,
-  ) => Promise<
-    Record<string, "modified" | "added" | "deleted" | "untracked">
-  >;
+  ) => Promise<Record<string, "modified" | "added" | "deleted" | "untracked">>;
   workspaceReadFile: (
     root: string,
     filePath: string,
@@ -272,6 +270,14 @@ interface HermesAPI {
     content: string,
   ) => Promise<boolean>;
   workspacePickFiles: () => Promise<string[]>;
+  applyDiff: (
+    root: string,
+    diff: string,
+  ) => Promise<{
+    files: string[];
+    backupDir: string | null;
+    errors: string[];
+  }>;
   showPopupMenu: (
     items: Array<{
       id: string;
@@ -445,6 +451,109 @@ interface HermesAPI {
     profile?: string,
   ) => Promise<{ success: boolean; error?: string }>;
 
+  // Memory search (FTS)
+  searchMemory: (
+    query: string,
+    profile?: string,
+  ) => Promise<Array<{ index: number; content: string; snippet: string }>>;
+
+  // Rules
+  searchWorkspaceFiles: (root: string, query: string) => Promise<string[]>;
+
+  listRules: (profile?: string) => Promise<
+    Array<{
+      name: string;
+      type: "always_on" | "model_decision" | "glob";
+      glob: string;
+      description: string;
+      priority: number;
+      path: string;
+    }>
+  >;
+  readRuleContent: (rulePath: string) => Promise<{
+    meta: {
+      name: string;
+      type: "always_on" | "model_decision" | "glob";
+      glob: string;
+      description: string;
+      priority: number;
+      path: string;
+    };
+    body: string;
+  } | null>;
+  createRule: (
+    name: string,
+    type: "always_on" | "model_decision" | "glob",
+    glob: string,
+    description: string,
+    body: string,
+    priority?: number,
+    profile?: string,
+  ) => Promise<{ success: boolean; error?: string; path?: string }>;
+  updateRule: (
+    name: string,
+    updates: {
+      type?: "always_on" | "model_decision" | "glob";
+      glob?: string;
+      description?: string;
+      body?: string;
+      priority?: number;
+    },
+    profile?: string,
+  ) => Promise<{ success: boolean; error?: string }>;
+  deleteRule: (
+    name: string,
+    profile?: string,
+  ) => Promise<{ success: boolean; error?: string }>;
+  matchGlobRules: (
+    filePath: string,
+    profile?: string,
+  ) => Promise<
+    Array<{
+      name: string;
+      type: "always_on" | "model_decision" | "glob";
+      glob: string;
+      description: string;
+      priority: number;
+      path: string;
+    }>
+  >;
+
+  // MRAG (Multi-modal RAG)
+  mragCreateKB: (
+    name: string,
+    profile?: string,
+  ) => Promise<{ success: boolean; error?: string; key?: string }>;
+  mragListKBs: (profile?: string) => Promise<
+    Array<{
+      key: string;
+      name: string;
+      path: string;
+      docCount: number;
+      chunkCount: number;
+      createdAt: number;
+      updatedAt: number;
+    }>
+  >;
+  mragGetKBInfo: (key: string, profile?: string) => Promise<{
+    key: string;
+    name: string;
+    path: string;
+    docCount: number;
+    chunkCount: number;
+    createdAt: number;
+    updatedAt: number;
+  } | null>;
+  mragRenameKB: (
+    key: string,
+    newName: string,
+    profile?: string,
+  ) => Promise<{ success: boolean; error?: string }>;
+  mragDeleteKB: (
+    key: string,
+    profile?: string,
+  ) => Promise<{ success: boolean; error?: string }>;
+
   // Soul
   readSoul: (profile?: string) => Promise<string>;
   writeSoul: (content: string, profile?: string) => Promise<boolean>;
@@ -486,6 +595,8 @@ interface HermesAPI {
     name: string,
     profile?: string,
   ) => Promise<{ success: boolean; error?: string }>;
+  getDisabledSkills(profile?: string): Promise<string[]>;
+  setSkillEnabled(name: string, enabled: boolean, profile?: string): Promise<{success: boolean; error?: string}>;
 
   // Session cache
   listCachedSessions: (
@@ -513,6 +624,15 @@ interface HermesAPI {
   >;
   updateSessionTitle: (sessionId: string, title: string) => Promise<void>;
   deleteSession: (sessionId: string) => Promise<void>;
+  exportSession: (
+    sessionId: string,
+    format: "markdown" | "json",
+  ) => Promise<{
+    success: boolean;
+    path?: string;
+    canceled?: boolean;
+    error?: string;
+  }>;
 
   // Session search
   searchSessions: (
@@ -805,6 +925,14 @@ interface HermesAPI {
     logFile?: string,
     lines?: number,
   ) => Promise<{ content: string; path: string }>;
+
+  // Specs management
+  listSpecs(profile?: string): Promise<Array<{title: string; status: string; created: string; sessionId: string; body: string}>>;
+  readSpec(name: string, profile?: string): Promise<{title: string; status: string; created: string; sessionId: string; body: string} | null>;
+  createSpec(meta: {title: string; status: string; created: string; session_id?: string}, body: string, profile?: string): Promise<{success: boolean; error?: string}>;
+  updateSpec(name: string, updates: {body?: string; status?: string; title?: string}, profile?: string): Promise<{success: boolean; error?: string}>;
+  deleteSpec(name: string, profile?: string): Promise<{success: boolean; error?: string}>;
+  parsePlan(text: string): any;
 }
 
 declare global {

@@ -256,6 +256,52 @@ const SKILL_CLI_FAILURE_MARKERS: readonly RegExp[] = [
   /^Error:/m,
 ];
 
+
+// ── Disabled Skills Management ──────────────────────
+
+/** Path to disabled skills list for a profile. */
+function disabledSkillsPath(profile?: string): string {
+  return join(profileHome(profile), "disabled-skills.json");
+}
+
+/** Read the set of disabled skill names for a profile. */
+export function getDisabledSkills(profile?: string): Set<string> {
+  const path = disabledSkillsPath(profile);
+  try {
+    if (!existsSync(path)) return new Set();
+    const data = JSON.parse(readFileSync(path, "utf-8"));
+    if (Array.isArray(data)) return new Set(data);
+    return new Set();
+  } catch {
+    return new Set();
+  }
+}
+
+/** Enable or disable a skill. Returns current disabled set. */
+export function setSkillEnabled(
+  name: string,
+  enabled: boolean,
+  profile?: string,
+): { success: boolean; error?: string } {
+  const path = disabledSkillsPath(profile);
+  const disabled = getDisabledSkills(profile);
+  try {
+    if (enabled) {
+      disabled.delete(name);
+    } else {
+      disabled.add(name);
+    }
+    const { mkdirSync, writeFileSync } = require("fs");
+    const { dirname } = require("path");
+    const dir = dirname(path);
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+    writeFileSync(path, JSON.stringify([...disabled], null, 2), "utf-8");
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: (err as Error).message };
+  }
+}
+
 export interface SkillCliResult {
   success: boolean;
   error?: string;

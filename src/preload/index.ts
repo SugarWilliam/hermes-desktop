@@ -369,10 +369,8 @@ const hermesAPI = {
   },
 
   onContextMenuAddToChat: (callback: (text: string) => void): (() => void) => {
-    const handler = (
-      _event: Electron.IpcRendererEvent,
-      text: string,
-    ): void => callback(text);
+    const handler = (_event: Electron.IpcRendererEvent, text: string): void =>
+      callback(text);
     ipcRenderer.on("context-menu-add-to-chat", handler);
     return () =>
       ipcRenderer.removeListener("context-menu-add-to-chat", handler);
@@ -381,15 +379,13 @@ const hermesAPI = {
   workspaceListDir: (
     root: string,
     relativePath?: string,
-  ): Promise<
-    Array<{ name: string; path: string; isDirectory: boolean }>
-  > => ipcRenderer.invoke("workspace-list-dir", root, relativePath),
+  ): Promise<Array<{ name: string; path: string; isDirectory: boolean }>> =>
+    ipcRenderer.invoke("workspace-list-dir", root, relativePath),
 
   workspaceGitStatus: (
     root: string,
-  ): Promise<
-    Record<string, "modified" | "added" | "deleted" | "untracked">
-  > => ipcRenderer.invoke("workspace-git-status", root),
+  ): Promise<Record<string, "modified" | "added" | "deleted" | "untracked">> =>
+    ipcRenderer.invoke("workspace-git-status", root),
 
   workspaceReadFile: (
     root: string,
@@ -411,6 +407,15 @@ const hermesAPI = {
 
   workspacePickFiles: (): Promise<string[]> =>
     ipcRenderer.invoke("workspace-pick-files"),
+
+  applyDiff: (
+    root: string,
+    diff: string,
+  ): Promise<{
+    files: string[];
+    backupDir: string | null;
+    errors: string[];
+  }> => ipcRenderer.invoke("apply-diff", root, diff),
 
   showPopupMenu: (
     items: Array<{
@@ -566,6 +571,207 @@ const hermesAPI = {
   ): Promise<{ success: boolean; error?: string }> =>
     ipcRenderer.invoke("write-user-profile", content, profile),
 
+  // Memory search (FTS)
+  searchMemory: (
+    query: string,
+    profile?: string,
+  ): Promise<Array<{ index: number; content: string; snippet: string }>> =>
+    ipcRenderer.invoke("search-memory", query, profile),
+
+  // Rules
+  searchWorkspaceFiles: (root: string, query: string): Promise<string[]> =>
+    ipcRenderer.invoke("search-workspace-files", root, query),
+
+  listRules: (
+    profile?: string,
+  ): Promise<
+    Array<{
+      name: string;
+      type: "always_on" | "model_decision" | "glob";
+      glob: string;
+      description: string;
+      priority: number;
+      path: string;
+    }>
+  > => ipcRenderer.invoke("list-rules", profile),
+  readRuleContent: (
+    rulePath: string,
+  ): Promise<{
+    meta: {
+      name: string;
+      type: "always_on" | "model_decision" | "glob";
+      glob: string;
+      description: string;
+      priority: number;
+      path: string;
+    };
+    body: string;
+  } | null> => ipcRenderer.invoke("read-rule-content", rulePath),
+  createRule: (
+    name: string,
+    type: "always_on" | "model_decision" | "glob",
+    glob: string,
+    description: string,
+    body: string,
+    priority?: number,
+    profile?: string,
+  ): Promise<{ success: boolean; error?: string; path?: string }> =>
+    ipcRenderer.invoke(
+      "create-rule",
+      name,
+      type,
+      glob,
+      description,
+      body,
+      priority ?? 0,
+      profile,
+    ),
+  updateRule: (
+    name: string,
+    updates: {
+      type?: "always_on" | "model_decision" | "glob";
+      glob?: string;
+      description?: string;
+      body?: string;
+      priority?: number;
+    },
+    profile?: string,
+  ): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke("update-rule", name, updates, profile),
+  deleteRule: (
+    name: string,
+    profile?: string,
+  ): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke("delete-rule", name, profile),
+  matchGlobRules: (
+    filePath: string,
+    profile?: string,
+  ): Promise<
+    Array<{
+      name: string;
+      type: "always_on" | "model_decision" | "glob";
+      glob: string;
+      description: string;
+      priority: number;
+      path: string;
+    }>
+  > => ipcRenderer.invoke("match-glob-rules", filePath, profile),
+
+  // MRAG (Multi-modal RAG)
+  mragCreateKB: (
+    name: string,
+    profile?: string,
+  ): Promise<{ success: boolean; error?: string; key?: string }> =>
+    ipcRenderer.invoke("mrag-create-kb", name, profile),
+
+  mragListKBs: (profile?: string): Promise<
+    Array<{
+      key: string;
+      name: string;
+      path: string;
+      docCount: number;
+      chunkCount: number;
+      createdAt: number;
+      updatedAt: number;
+    }>
+  > => ipcRenderer.invoke("mrag-list-kbs", profile),
+
+  mragGetKBInfo: (key: string, profile?: string): Promise<{
+    key: string;
+    name: string;
+    path: string;
+    docCount: number;
+    chunkCount: number;
+    createdAt: number;
+    updatedAt: number;
+  } | null> => ipcRenderer.invoke("mrag-get-kb-info", key, profile),
+
+  mragRenameKB: (
+    key: string,
+    newName: string,
+    profile?: string,
+  ): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke("mrag-rename-kb", key, newName, profile),
+
+  mragDeleteKB: (
+    key: string,
+    profile?: string,
+  ): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke("mrag-delete-kb", key, profile),
+
+  mragIndexKB: (
+    key: string,
+    docDir: string,
+    profile?: string,
+  ): Promise<{
+    indexed: number;
+    updated: number;
+    skipped: number;
+    errors: string[];
+  }> => ipcRenderer.invoke("mrag-index-kb", key, docDir, profile),
+
+  mragIncrementalIndexKB: (
+    key: string,
+    docDir: string,
+    profile?: string,
+  ): Promise<{
+    indexed: number;
+    updated: number;
+    skipped: number;
+    errors: string[];
+  }> => ipcRenderer.invoke("mrag-incremental-index-kb", key, docDir, profile),
+
+  mragAddDoc: (
+    key: string,
+    filePath: string,
+    profile?: string,
+  ): Promise<{ success: boolean; parentCount: number; error?: string }> =>
+    ipcRenderer.invoke("mrag-add-doc", key, filePath, profile),
+
+  mragRemoveDoc: (
+    key: string,
+    docPath: string,
+    profile?: string,
+  ): Promise<void> =>
+    ipcRenderer.invoke("mrag-remove-doc", key, docPath, profile),
+
+  mragSearchKB: (
+    key: string,
+    query: string,
+    topK?: number,
+    profile?: string,
+  ): Promise<
+    Array<{
+      score: number;
+      parentContent: string;
+      subSnippet: string;
+      docPath: string;
+      sectionTitle: string;
+      parentId: number;
+    }>
+  > => ipcRenderer.invoke("mrag-search-kb", key, query, topK, profile),
+
+  mragSearchAllKBs: (
+    query: string,
+    topK?: number,
+    profile?: string,
+  ): Promise<
+    Record<
+      string,
+      Array<{
+        score: number;
+        parentContent: string;
+        subSnippet: string;
+        docPath: string;
+        sectionTitle: string;
+        parentId: number;
+      }>
+    >
+  > => ipcRenderer.invoke("mrag-search-all-kbs", query, topK, profile),
+
+  mragGetChunkCount: (key: string, profile?: string): Promise<number> =>
+    ipcRenderer.invoke("mrag-get-chunk-count", key, profile),
+
   // Soul
   readSoul: (profile?: string): Promise<string> =>
     ipcRenderer.invoke("read-soul", profile),
@@ -614,6 +820,10 @@ const hermesAPI = {
     profile?: string,
   ): Promise<{ success: boolean; error?: string }> =>
     ipcRenderer.invoke("uninstall-skill", name, profile),
+  getDisabledSkills: (profile?: string): Promise<string[]> =>
+    ipcRenderer.invoke("get-disabled-skills", profile),
+  setSkillEnabled: (name: string, enabled: boolean, profile?: string): Promise<{success: boolean; error?: string}> =>
+    ipcRenderer.invoke("set-skill-enabled", name, enabled, profile),
 
   // Session cache (fast local cache with generated titles)
   listCachedSessions: (
@@ -645,6 +855,16 @@ const hermesAPI = {
     ipcRenderer.invoke("update-session-title", sessionId, title),
   deleteSession: (sessionId: string): Promise<void> =>
     ipcRenderer.invoke("delete-session", sessionId),
+
+  exportSession: (
+    sessionId: string,
+    format: "markdown" | "json",
+  ): Promise<{
+    success: boolean;
+    path?: string;
+    canceled?: boolean;
+    error?: string;
+  }> => ipcRenderer.invoke("export-session", sessionId, format),
 
   // Session search
   searchSessions: (
@@ -1020,6 +1240,20 @@ const hermesAPI = {
     lines?: number,
   ): Promise<{ content: string; path: string }> =>
     ipcRenderer.invoke("read-logs", logFile, lines),
+
+  // Specs management
+  listSpecs: (profile?: string): Promise<Array<{title: string; status: string; created: string; sessionId: string; body: string}>> =>
+    ipcRenderer.invoke("list-specs", profile),
+  readSpec: (name: string, profile?: string): Promise<{title: string; status: string; created: string; sessionId: string; body: string} | null> =>
+    ipcRenderer.invoke("read-spec", name, profile),
+  createSpec: (meta: {title: string; status: string; created: string; session_id?: string}, body: string, profile?: string): Promise<{success: boolean; error?: string}> =>
+    ipcRenderer.invoke("create-spec", meta, body, profile),
+  updateSpec: (name: string, updates: {body?: string; status?: string; title?: string}, profile?: string): Promise<{success: boolean; error?: string}> =>
+    ipcRenderer.invoke("update-spec", name, updates, profile),
+  deleteSpec: (name: string, profile?: string): Promise<{success: boolean; error?: string}> =>
+    ipcRenderer.invoke("delete-spec", name, profile),
+  parsePlan: (text: string) =>
+    ipcRenderer.invoke("parse-plan", text),
 };
 
 if (process.contextIsolated) {

@@ -57,6 +57,8 @@
 }
 
 .paradigm-agent-turn {
+  /* Performance: prevent layout recalculation of collapsed sections */
+  contain: layout style;
   display: flex;
   flex-direction: column;
   gap: 4px;

@@ -14,6 +14,9 @@ import {
   Timer,
   Signal,
   Settings as SettingsIcon,
+  BookOpen,
+  Database,
+  FileText,
 } from "../../assets/icons";
 
 export type NavView =
@@ -30,7 +33,10 @@ export type NavView =
   | "schedules"
   | "kanban"
   | "gateway"
-  | "settings";
+  | "settings"
+  | "rules"
+  | "mrag"
+  | "specs";
 
 export interface NavItem {
   view: NavView;
@@ -70,6 +76,9 @@ export const NAV_GROUPS: NavGroup[] = [
       { view: "providers", icon: KeyRound, labelKey: "navigation.providers" },
       { view: "skills", icon: Puzzle, labelKey: "navigation.skills" },
       { view: "soul", icon: Sparkles, labelKey: "navigation.soul" },
+      { view: "rules", icon: BookOpen, labelKey: "navigation.rules" },
+      { view: "mrag", icon: Database, labelKey: "navigation.mrag" },
+      { view: "specs", icon: FileText, labelKey: "navigation.specs" },
       { view: "memory", icon: Brain, labelKey: "navigation.memory" },
       { view: "tools", icon: Wrench, labelKey: "navigation.tools" },
     ],

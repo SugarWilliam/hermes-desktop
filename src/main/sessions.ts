@@ -5,6 +5,84 @@ import type { Attachment } from "../shared/attachments";
 import { isImageMime } from "../shared/attachments";
 import { removeSessionFromCache } from "./session-cache";
 
+
+// ── Cross-Session Context ─────────────────────────────
+
+export interface RecentSessionContext {
+  sessionId: string;
+  title: string;
+  startedAt: number;
+  messageCount: number;
+  preview: string;
+}
+
+/**
+ * Find recent sessions from the same workspace/context.
+ * Returns up to 3 most recent sessions with their summaries.
+ */
+export function getRecentSessions(limit = 3): RecentSessionContext[] {
+  try {
+    const dbPath = activeStateDbPath();
+    if (!existsSync(dbPath)) return [];
+
+    const db = new Database(dbPath, { readonly: true });
+    try {
+      const rows = db
+        .prepare(
+          "SELECT id, source, started_at, COALESCE(title, 'Untitled') as title, preview FROM sessions ORDER BY started_at DESC LIMIT ?"
+        )
+        .all(limit) as Array<{
+        id: string;
+        source: string;
+        started_at: number;
+        title: string;
+        preview: string;
+      }>;
+
+      // Get message count for each session
+      return rows.map((row) => {
+        const countRow = db
+          .prepare("SELECT COUNT(*) as cnt FROM messages WHERE session_id = ?")
+          .get(row.id) as { cnt: number } | undefined;
+        return {
+          sessionId: row.id,
+          title: row.title,
+          startedAt: row.started_at,
+          messageCount: countRow?.cnt ?? 0,
+          preview: row.preview || "",
+        };
+      });
+    } finally {
+      db.close();
+    }
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Build a context string from recent sessions for injection.
+ */
+export function getRecentSessionsContext(limit = 3): string | null {
+  const recent = getRecentSessions(limit);
+  if (recent.length === 0) return null;
+
+  const lines = [
+    "## Recent Session Context",
+    "",
+    "The following recent sessions may provide relevant context:",
+    "",
+  ];
+  for (const s of recent) {
+    const date = new Date(s.startedAt * 1000).toLocaleDateString();
+    lines.push(
+      `- **${s.title}** (${date}, ${s.messageCount} messages)`
+    );
+  }
+  lines.push("");
+  return lines.join("\n");
+}
+
 // Sentinel prefix used by hermes-agent's hermes_state.py to mark
 // JSON-encoded multimodal content in the messages.content column.
 // See agent source: hermes_state._CONTENT_JSON_PREFIX = "\x00json:".
@@ -509,4 +587,171 @@ export function deleteSession(sessionId: string): void {
   }
 
   removeSessionFromCache(sessionId);
+}
+
+export interface SessionExportData {
+  id: string;
+  title: string;
+  source: string;
+  startedAt: number;
+  model: string;
+  messageCount: number;
+  messages: HistoryItem[];
+}
+
+export function getSessionExportData(
+  sessionId: string,
+): SessionExportData | null {
+  const db = getDb();
+  if (!db) return null;
+
+  try {
+    const session = db
+      .prepare(
+        "SELECT id, source, started_at, message_count, model, title FROM sessions WHERE id = ?",
+      )
+      .get(sessionId) as
+      | {
+          id: string;
+          source: string;
+          started_at: number;
+          message_count: number;
+          model: string;
+          title: string | null;
+        }
+      | undefined;
+
+    if (!session) return null;
+
+    const messages = getSessionMessages(sessionId);
+
+    return {
+      id: session.id,
+      title: session.title || "Untitled",
+      source: session.source,
+      startedAt: session.started_at,
+      model: session.model || "unknown",
+      messageCount: session.message_count,
+      messages,
+    };
+  } finally {
+    db.close();
+  }
+}
+
+export function exportSessionAsMarkdown(sessionId: string): string | null {
+  const data = getSessionExportData(sessionId);
+  if (!data) return null;
+
+  const date = new Date(data.startedAt * 1000).toLocaleString();
+  const lines: string[] = [];
+
+  lines.push("# " + data.title);
+  lines.push("");
+  lines.push("**Date**: " + date);
+  lines.push("**Model**: " + data.model);
+  lines.push("**Messages**: " + data.messageCount);
+  lines.push("");
+  lines.push("---");
+  lines.push("");
+
+  for (const msg of data.messages) {
+    switch (msg.kind) {
+      case "user":
+        lines.push("## User");
+        lines.push("");
+        lines.push(msg.content);
+        lines.push("");
+        break;
+      case "assistant":
+        lines.push("## Agent");
+        lines.push("");
+        lines.push(msg.content);
+        lines.push("");
+        break;
+      case "reasoning":
+        lines.push("> **Reasoning**");
+        lines.push(">");
+        lines.push("> " + msg.text.replace(/\n/g, "\n> "));
+        lines.push("");
+        break;
+      case "tool_call":
+        lines.push("### Tool: " + msg.name);
+        lines.push("");
+        lines.push("```json");
+        lines.push(msg.args);
+        lines.push("```");
+        lines.push("");
+        break;
+      case "tool_result":
+        {
+          lines.push("### Result: " + msg.name);
+          lines.push("");
+          const resultContent =
+            msg.content.length > 5000
+              ? msg.content.slice(0, 5000) + "\n\n... (truncated)"
+              : msg.content;
+          lines.push("```");
+          lines.push(resultContent);
+          lines.push("```");
+          lines.push("");
+          break;
+        }
+        break;
+    }
+  }
+
+  return lines.join("\n");
+}
+
+export function exportSessionAsJson(sessionId: string): string | null {
+  const data = getSessionExportData(sessionId);
+  if (!data) return null;
+
+  const output = {
+    id: data.id,
+    title: data.title,
+    source: data.source,
+    startedAt: data.startedAt,
+    model: data.model,
+    messageCount: data.messageCount,
+    messages: data.messages.map((msg) => {
+      const base = {
+        kind: msg.kind,
+        timestamp: msg.timestamp,
+      };
+      switch (msg.kind) {
+        case "user":
+          return {
+            ...base,
+            content: msg.content,
+            attachments: msg.attachments,
+          };
+        case "assistant":
+          return {
+            ...base,
+            content: msg.content,
+            attachments: msg.attachments,
+          };
+        case "reasoning":
+          return { ...base, text: msg.text };
+        case "tool_call":
+          return {
+            ...base,
+            name: msg.name,
+            callId: msg.callId,
+            args: msg.args,
+          };
+        case "tool_result":
+          return {
+            ...base,
+            name: msg.name,
+            callId: msg.callId,
+            content: msg.content,
+          };
+      }
+    }),
+  };
+
+  return JSON.stringify(output, null, 2);
 }

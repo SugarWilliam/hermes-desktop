@@ -35,6 +35,7 @@ function Skills({ profile }: SkillsProps): React.JSX.Element {
   const [detailSkill, setDetailSkill] = useState<InstalledSkill | null>(null);
   const [detailContent, setDetailContent] = useState("");
   const [actionInProgress, setActionInProgress] = useState<string | null>(null);
+  const [disabledSkills, setDisabledSkills] = useState<Set<string>>(new Set());
   const [error, setError] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
 
@@ -54,14 +55,41 @@ function Skills({ profile }: SkillsProps): React.JSX.Element {
     setLoading(false);
   }, [loadInstalled, loadBundled]);
 
+  const loadDisabled = useCallback(async (): Promise<void> => {
+    try {
+      const list = await window.hermesAPI.getDisabledSkills(profile);
+      setDisabledSkills(new Set(list));
+    } catch {
+      // ignore
+    }
+  }, [profile]);
+
   useEffect(() => {
     loadAll();
-  }, [loadAll]);
+    loadDisabled();
+  }, [loadAll, loadDisabled]);
 
   async function handleViewDetail(skill: InstalledSkill): Promise<void> {
     setDetailSkill(skill);
     const content = await window.hermesAPI.getSkillContent(skill.path);
     setDetailContent(content);
+  }
+
+  async function handleToggleSkill(name: string, enabled: boolean): Promise<void> {
+    setActionInProgress(name);
+    setError("");
+    try {
+      const result = await window.hermesAPI.setSkillEnabled(name, enabled, profile);
+      if (result.success) {
+        await loadDisabled();
+      } else {
+        setError(result.error || "Failed to update skill");
+      }
+    } catch {
+      setError("Failed to update skill");
+    } finally {
+      setActionInProgress(null);
+    }
   }
 
   async function handleInstall(name: string): Promise<void> {
@@ -299,6 +327,24 @@ function Skills({ profile }: SkillsProps): React.JSX.Element {
                     {skill.description}
                   </div>
                 )}
+                <div
+                  className={`skills-toggle ${
+                    disabledSkills.has(skill.name) ? "skills-toggle--off" : "skills-toggle--on"
+                  }`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (actionInProgress !== skill.name) {
+                      handleToggleSkill(skill.name, disabledSkills.has(skill.name));
+                    }
+                  }}
+                  role="switch"
+                  aria-checked={!disabledSkills.has(skill.name)}
+                  title={
+                    disabledSkills.has(skill.name) ? "Enable skill" : "Disable skill"
+                  }
+                >
+                  <span className="skills-toggle-knob" />
+                </div>
               </button>
             ))}
           </div>

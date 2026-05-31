@@ -13,4 +13,6 @@ export default {
   emptyHint: "开始聊天以创建第一条会话",
   messages: "条消息",
   messageSingular: "条消息",
+  exportSuccess: "会话导出成功",
+  exportError: "导出失败",
 } as const;

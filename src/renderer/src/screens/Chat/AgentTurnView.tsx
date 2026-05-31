@@ -13,10 +13,15 @@ import { useI18n } from "../../components/useI18n";
 import { AgentMarkdown } from "../../components/AgentMarkdown";
 import { ThinkingView } from "./ThinkingView";
 import { AgentTodoPanel } from "./AgentTodoPanel";
+import { RigorousPhaseView } from "../../components/RigorousPhaseView";
+import { PlanTodoView } from "../../components/PlanTodoView";
+import { TurnMetrics } from "../../components/TurnMetrics";
+import type { TurnMetricsData } from "../../components/TurnMetrics";
 import type { AgentTodoItem } from "./agentTodos";
 import type { AgentTurnPhases, ExecutionItem } from "./agentTurnPhases";
 import type { AgentRunStep } from "./AgentRunPanel";
 import type { StreamStallState } from "./hooks/useStreamStall";
+import type { ChatMode } from "../../../../shared/chatMode";
 
 interface AgentTurnViewProps {
   phases: AgentTurnPhases;
@@ -27,6 +32,9 @@ interface AgentTurnViewProps {
   todos?: AgentTodoItem[];
   showThinkingPlaceholder?: boolean;
   isLast?: boolean;
+  workspaceRoot?: string | null;
+  chatMode?: ChatMode;
+  turnMetrics?: TurnMetricsData;
   onApprove?: () => void;
   onDeny?: () => void;
   needsApproval?: boolean;
@@ -34,19 +42,19 @@ interface AgentTurnViewProps {
   onAbort?: () => void;
 }
 
-function ExecutionLine({
-  item,
-}: {
-  item: ExecutionItem;
-}): React.JSX.Element {
+function ExecutionLine({ item }: { item: ExecutionItem }): React.JSX.Element {
   const { t } = useI18n();
 
   if (item.type === "viewed") {
     return (
       <div className="paradigm-exec-line paradigm-exec-line--viewed">
-        <Check size={12} className="paradigm-exec-icon paradigm-exec-icon--done" />
+        <Check
+          size={12}
+          className="paradigm-exec-icon paradigm-exec-icon--done"
+        />
         <span>
-          {t("chat.phase.viewed")} <span className="paradigm-exec-em">{item.name}</span>
+          {t("chat.phase.viewed")}{" "}
+          <span className="paradigm-exec-em">{item.name}</span>
         </span>
       </div>
     );
@@ -56,9 +64,15 @@ function ExecutionLine({
     return (
       <div className="paradigm-exec-line paradigm-exec-line--skill">
         {item.done ? (
-          <Check size={12} className="paradigm-exec-icon paradigm-exec-icon--done" />
+          <Check
+            size={12}
+            className="paradigm-exec-icon paradigm-exec-icon--done"
+          />
         ) : (
-          <Loader2 size={12} className="paradigm-exec-icon paradigm-exec-spin" />
+          <Loader2
+            size={12}
+            className="paradigm-exec-icon paradigm-exec-spin"
+          />
         )}
         <span>
           Skill <span className="paradigm-exec-em">{item.name}</span>
@@ -98,7 +112,9 @@ function ExecutionLine({
       <div className="paradigm-exec-line">
         <ListTodo size={12} className="paradigm-exec-icon" />
         <span>
-          {item.done ? t("chat.phase.todoUpdated") : t("chat.phase.todoUpdating")}
+          {item.done
+            ? t("chat.phase.todoUpdated")
+            : t("chat.phase.todoUpdating")}
         </span>
       </div>
     );
@@ -116,7 +132,10 @@ function ExecutionLine({
   return (
     <div className="paradigm-exec-line">
       {item.done ? (
-        <Check size={12} className="paradigm-exec-icon paradigm-exec-icon--done" />
+        <Check
+          size={12}
+          className="paradigm-exec-icon paradigm-exec-icon--done"
+        />
       ) : (
         <Loader2 size={12} className="paradigm-exec-icon paradigm-exec-spin" />
       )}
@@ -137,6 +156,9 @@ export const AgentTurnView = memo(function AgentTurnView({
   todos = [],
   showThinkingPlaceholder = false,
   isLast = false,
+  workspaceRoot,
+  chatMode,
+  turnMetrics,
   onApprove,
   onDeny,
   needsApproval = false,
@@ -198,11 +220,20 @@ export const AgentTurnView = memo(function AgentTurnView({
       : "";
 
   return (
-    <section className="paradigm-agent-turn" aria-label={t("chat.phase.agentTurn")}>
+    <section
+      className="paradigm-agent-turn"
+      aria-label={t("chat.phase.agentTurn")}
+    >
       {isLive && streamStall?.stalled && onAbort && (
         <div className="paradigm-stall-banner" role="status">
-          <p>{t("chat.phase.stallWarning", { seconds: streamStall.stallSec })}</p>
-          <button type="button" className="paradigm-stall-cancel" onClick={onAbort}>
+          <p>
+            {t("chat.phase.stallWarning", { seconds: streamStall.stallSec })}
+          </p>
+          <button
+            type="button"
+            className="paradigm-stall-cancel"
+            onClick={onAbort}
+          >
             {t("chat.phase.cancelRun")}
           </button>
         </div>
@@ -216,9 +247,12 @@ export const AgentTurnView = memo(function AgentTurnView({
           >
             <Brain size={14} className="paradigm-phase-icon" />
             <span className="paradigm-phase-title">
-              {t("chat.phase.deepThinking")}
+              {chatMode === "rigorous"
+                ? t("chat.phase.rigorousThinking")
+                : t("chat.phase.deepThinking")}
               {elapsedLabel}
             </span>
+            {turnMetrics && <TurnMetrics metrics={turnMetrics} compact />}
             {isLive && !reasoning && (
               <Loader2 size={12} className="paradigm-exec-spin" />
             )}
@@ -229,14 +263,18 @@ export const AgentTurnView = memo(function AgentTurnView({
           </button>
           {thinkOpen && (
             <div className="paradigm-phase-body paradigm-phase-body--thinking">
-              <ThinkingView
-                text={reasoning}
-                placeholder={
-                  isLive && showThinkingPlaceholder
-                    ? t("chat.agentThinkingPlaceholder")
-                    : undefined
-                }
-              />
+              {chatMode === "rigorous" ? (
+                <RigorousPhaseView text={reasoning} isLive={isLive} />
+              ) : (
+                <ThinkingView
+                  text={reasoning}
+                  placeholder={
+                    isLive && showThinkingPlaceholder
+                      ? t("chat.agentThinkingPlaceholder")
+                      : undefined
+                  }
+                />
+              )}
             </div>
           )}
         </div>
@@ -250,7 +288,9 @@ export const AgentTurnView = memo(function AgentTurnView({
             onClick={() => setExecOpen((o) => !o)}
           >
             <Terminal size={14} className="paradigm-phase-icon" />
-            <span className="paradigm-phase-title">{t("chat.phase.execution")}</span>
+            <span className="paradigm-phase-title">
+              {t("chat.phase.execution")}
+            </span>
             <ChevronDown
               size={14}
               className={`paradigm-phase-chevron ${execOpen ? "paradigm-phase-chevron--open" : ""}`}
@@ -259,7 +299,9 @@ export const AgentTurnView = memo(function AgentTurnView({
           {execOpen && (
             <div className="paradigm-phase-body">
               {liveExecution.length === 0 && isLive && (
-                <p className="agent-run-placeholder">{t("chat.phase.waitingExecution")}</p>
+                <p className="agent-run-placeholder">
+                  {t("chat.phase.waitingExecution")}
+                </p>
               )}
               {liveExecution.map((item) => (
                 <ExecutionLine key={item.id} item={item} />
@@ -278,24 +320,47 @@ export const AgentTurnView = memo(function AgentTurnView({
         <div className="paradigm-phase paradigm-phase--result">
           <div className="paradigm-phase-head paradigm-phase-head--static">
             <Sparkles size={14} className="paradigm-phase-icon" />
-            <span className="paradigm-phase-title">{t("chat.phase.result")}</span>
+            <span className="paradigm-phase-title">
+              {t("chat.phase.result")}
+            </span>
             {showProcessing && (
-              <span className="paradigm-processing">{t("chat.phase.processing")}</span>
+              <span className="paradigm-processing">
+                {t("chat.phase.processing")}
+              </span>
             )}
           </div>
           <div className="paradigm-phase-body paradigm-phase-body--result">
             {hasResult ? (
-              <AgentMarkdown variant="chat">{phases.result}</AgentMarkdown>
+              <AgentMarkdown
+                variant="chat"
+                workspaceRoot={workspaceRoot ?? undefined}
+              >
+                {phases.result}
+              </AgentMarkdown>
             ) : (
-              <p className="agent-run-placeholder">{t("chat.phase.processing")}</p>
+              <p className="agent-run-placeholder">
+                {t("chat.phase.processing")}
+              </p>
             )}
           </div>
         </div>
       )}
 
+      {chatMode === "plan" && !isLive && hasResult && (
+        <div className="plan-todo-section-wrap">
+          <PlanTodoView
+            text={reasoning + "\n" + phases.result}
+            title={t("chat.planTasks")}
+          />
+        </div>
+      )}
+
       {needsApproval && onApprove && onDeny && (
         <div className="chat-approval-bar">
-          <button className="chat-approval-btn chat-approve" onClick={onApprove}>
+          <button
+            className="chat-approval-btn chat-approve"
+            onClick={onApprove}
+          >
             {t("chat.approve")}
           </button>
           <button className="chat-approval-btn chat-deny" onClick={onDeny}>

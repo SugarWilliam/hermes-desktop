@@ -2,6 +2,7 @@ import { existsSync, readFileSync, statSync } from "fs";
 import { join } from "path";
 import Database from "better-sqlite3";
 import { profileHome, safeWriteFile } from "./utils";
+import { indexMemory } from "./memory-index";
 
 const ENTRY_DELIMITER = "\n§\n";
 const MEMORY_CHAR_LIMIT = 2200;
@@ -29,6 +30,74 @@ export interface MemoryInfo {
     charLimit: number;
   };
   stats: { totalSessions: number; totalMessages: number };
+}
+
+
+// ── Memory Categorization ───────────────────────────
+
+/** Parsed memory category info. */
+export interface MemoryCategory {
+  name: string;
+  displayName: string;
+  count: number;
+}
+
+/** Extract [category: xxx] tag from a memory entry. */
+function extractCategory(content: string): string {
+  const match = content.match(/^\[category:\s*([^\]]+)\]/m);
+  return match ? match[1].trim().toLowerCase() : "uncategorized";
+}
+
+/** Extract [priority: xxx] tag (high/medium/low). */
+function extractPriority(content: string): string {
+  const match = content.match(/^\[priority:\s*([^\]]+)\]/m);
+  return match ? match[1].trim().toLowerCase() : "low";
+}
+
+/** List all memory categories with counts. */
+export function getMemoryCategories(profile?: string): MemoryCategory[] {
+  const mem = readMemory(profile);
+  const entries = mem.memory.entries;
+  if (entries.length === 0) return [];
+  
+  const categoryMap = new Map<string, number>();
+  for (const entry of entries) {
+    const cat = extractCategory(entry.content);
+    categoryMap.set(cat, (categoryMap.get(cat) || 0) + 1);
+  }
+  
+  const displayNames: Record<string, string> = {
+    "session-summary": "Session Summaries",
+    "project-context": "Project Context",
+    "user-preference": "User Preferences",
+    "learned-knowledge": "Learned Knowledge",
+    "code-pattern": "Code Patterns",
+    "decision-log": "Decision Log",
+    "uncategorized": "Uncategorized",
+  };
+  
+  return Array.from(categoryMap.entries()).map(([name, count]) => ({
+    name,
+    displayName: displayNames[name] || name,
+    count,
+  }));
+}
+
+/** Get memory entries filtered by category. */
+export function getMemoryByCategory(category: string, profile?: string): MemoryEntry[] {
+  const mem = readMemory(profile);
+  if (category === "all") return mem.memory.entries;
+  return mem.memory.entries.filter(
+    (e) => extractCategory(e.content) === category
+  );
+}
+
+/** Get high-priority memory entries for context injection. */
+export function getHighPriorityMemories(profile?: string): string[] {
+  const mem = readMemory(profile);
+  return mem.memory.entries
+    .filter((e) => extractPriority(e.content) === "high")
+    .map((e) => e.content);
 }
 
 function memoryPath(profile?: string): string {
@@ -111,6 +180,15 @@ export function readMemory(profile?: string): MemoryInfo {
   const memFile = readFileSafe(memoryPath(profile));
   const userFile = readFileSafe(userPath(profile));
 
+  // Backfill FTS index on read (lazy, idempotent)
+  if (memFile.content) {
+    try {
+      indexMemory(memFile.content, profile);
+    } catch {
+      /* non-critical */
+    }
+  }
+
   return {
     memory: {
       ...memFile,
@@ -149,6 +227,11 @@ export function addMemoryEntry(
   }
 
   writeFileSafe(filePath, newContent);
+  try {
+    indexMemory(newContent, profile);
+  } catch {
+    /* non-critical */
+  }
   return { success: true };
 }
 
@@ -176,6 +259,11 @@ export function updateMemoryEntry(
   }
 
   writeFileSafe(filePath, newContent);
+  try {
+    indexMemory(newContent, profile);
+  } catch {
+    /* non-critical */
+  }
   return { success: true };
 }
 
@@ -187,7 +275,13 @@ export function removeMemoryEntry(index: number, profile?: string): boolean {
   if (index < 0 || index >= entries.length) return false;
 
   entries.splice(index, 1);
-  writeFileSafe(filePath, serializeEntries(entries));
+  const newContent = serializeEntries(entries);
+  writeFileSafe(filePath, newContent);
+  try {
+    indexMemory(newContent, profile);
+  } catch {
+    /* non-critical */
+  }
   return true;
 }
 

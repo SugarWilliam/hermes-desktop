@@ -3,7 +3,7 @@ import { createStreamGuard } from "./streamGuard";
 import {
   CHAT_MODE_STORAGE_KEY,
   isPlanReadyForApproval,
-  shouldSuggestPlanMode,
+  shouldSuggestMode,
   type ChatMode,
 } from "../../../../shared/chatMode";
 import {
@@ -19,7 +19,7 @@ import { ChatEmptyState } from "./ChatEmptyState";
 import { MessageList } from "./MessageList";
 import { ModelPicker } from "./ModelPicker";
 import { ChatModeSelect } from "./ChatModeSelect";
-import { useChatScroll } from "./hooks/useChatScroll";
+
 import { useChatIPC } from "./hooks/useChatIPC";
 import { useLiveSessionSync } from "./hooks/useLiveSessionSync";
 import { useChatActions } from "./hooks/useChatActions";
@@ -28,6 +28,7 @@ import { useModelConfig } from "./hooks/useModelConfig";
 import { useFastMode } from "./hooks/useFastMode";
 import { useLocalCommands } from "./hooks/useLocalCommands";
 import { useI18n } from "../../components/useI18n";
+import { RulesEditor } from "../../components/RulesEditor";
 import { buildChatTranscript } from "./transcriptUtils";
 import { extractWorkspaceReferenceFromBlock } from "../../../../shared/workspaceContext";
 import type { Attachment } from "../../../../shared/attachments";
@@ -76,7 +77,7 @@ function Chat({
   const [chatMode, setChatMode] = useState<ChatMode>(() => {
     try {
       const stored = sessionStorage.getItem(CHAT_MODE_STORAGE_KEY);
-      if (stored === "chat" || stored === "agent" || stored === "plan") {
+      if (stored === "chat" || stored === "agent" || stored === "plan" || stored === "rigorous") {
         return stored;
       }
     } catch {
@@ -84,14 +85,17 @@ function Chat({
     }
     return "agent";
   });
-  const [planSuggestion, setPlanSuggestion] = useState<string | null>(null);
+  const [modeSuggestion, setModeSuggestion] = useState<ChatMode | null>(null);
   const [workspaceOpen, setWorkspaceOpen] = useState(false);
   const [chatPaneWidth, setChatPaneWidth] = useState(readChatPaneWidth);
   const dragCounter = useRef(0);
   const chatInputRef = useRef<ChatInputHandle>(null);
   const queueRef = useRef<QueuedMessage[]>([]);
   const [queuedCount, setQueuedCount] = useState(0);
+  const [rulesOpen, setRulesOpen] = useState(false);
+  const rulesOpenRef = useRef(rulesOpen);
   const hermesSessionIdRef = useRef<string | null>(null);
+  const chatModeRef = useRef(chatMode);
 
   const streamGuard = useMemo(
     () => createStreamGuard(() => hermesSessionIdRef.current),
@@ -99,6 +103,14 @@ function Chat({
   );
 
   useEffect(() => {
+    chatModeRef.current = chatMode;
+  }, [chatMode]);
+
+  useEffect(() => {
+    rulesOpenRef.current = rulesOpen;
+  }, [rulesOpen]);
+
+useEffect(() => {
     hermesSessionIdRef.current = hermesSessionId;
   }, [hermesSessionId]);
 
@@ -113,7 +125,7 @@ function Chat({
     setToolProgress(null);
     setToolProgressLog([]);
     setUsage(null);
-    setPlanSuggestion(null);
+    setModeSuggestion(null);
     chatInputRef.current?.clear();
   }, [streamGuard]);
 
@@ -128,7 +140,7 @@ function Chat({
     };
   }, []);
 
-  const { containerRef, bottomRef } = useChatScroll(messages);
+  // Scroll managed by react-virtuoso inside MessageList
   const modelConfig = useModelConfig(profile);
   const {
     fastMode,
@@ -204,14 +216,30 @@ function Chat({
   // Cmd/Ctrl+N → new chat
   useEffect(() => {
     function onKey(e: KeyboardEvent): void {
-      if ((e.metaKey || e.ctrlKey) && e.key === "n") {
+      const mod = e.metaKey || e.ctrlKey;
+      const shift = e.shiftKey;
+      if (mod && e.key === "n" && !shift) {
         e.preventDefault();
         onNewChat?.();
+      }
+      if (mod && shift && e.key === "R") {
+        e.preventDefault();
+        setChatMode((prev) => (prev === "rigorous" ? "agent" : "rigorous"));
+      }
+      if (mod && shift && e.key === "P") {
+        e.preventDefault();
+        setRulesOpen((o) => !o);
+      }
+      if (mod && shift && e.key === "E") {
+        e.preventDefault();
+        if (hermesSessionId) {
+          window.hermesAPI.exportSession(hermesSessionId, "markdown");
+        }
       }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onNewChat]);
+  }, [onNewChat, hermesSessionId]);
 
   useEffect(() => {
     try {
@@ -356,14 +384,11 @@ function Chat({
 
   const handleSubmitOrQueue = useCallback(
     (text: string, attachments: Attachment[]) => {
-      if (
-        chatMode !== "plan" &&
-        shouldSuggestPlanMode(text) &&
-        planSuggestion !== text
-      ) {
-        setPlanSuggestion(text);
-      } else if (planSuggestion && planSuggestion !== text) {
-        setPlanSuggestion(null);
+      const suggestedMode = shouldSuggestMode(text);
+      if (suggestedMode && suggestedMode !== chatMode) {
+        setModeSuggestion(suggestedMode);
+      } else if (modeSuggestion) {
+        setModeSuggestion(null);
       }
       if (isLoading) {
         queueRef.current.push({ text, attachments });
@@ -374,7 +399,7 @@ function Chat({
       setToolProgressLog([]);
       void handleSendRef.current(text, attachments);
     },
-    [isLoading, chatMode, planSuggestion],
+    [isLoading, chatMode, modeSuggestion],
   );
 
   const bindContextFromAttachmentPath = useCallback(
@@ -519,15 +544,15 @@ function Chat({
         onClear={handleClear}
       />
 
-      {planSuggestion && chatMode !== "plan" && (
+      {(modeSuggestion && modeSuggestion !== chatMode) && (
         <div className="chat-plan-banner" role="status">
           <span>{t("chat.planSuggest")}</span>
           <button
             type="button"
             className="btn-ghost chat-plan-banner-btn"
             onClick={() => {
-              setChatMode("plan");
-              setPlanSuggestion(null);
+              setChatMode(modeSuggestion!);
+              setModeSuggestion(null);
             }}
           >
             {t("chat.planSwitch")}
@@ -535,7 +560,7 @@ function Chat({
           <button
             type="button"
             className="btn-ghost chat-plan-banner-dismiss"
-            onClick={() => setPlanSuggestion(null)}
+            onClick={() => setModeSuggestion(null)}
             aria-label={t("chat.planDismiss")}
           >
             ×
@@ -543,7 +568,7 @@ function Chat({
         </div>
       )}
 
-      <div className="chat-messages" ref={containerRef}>
+      <div className="chat-messages">
         {messages.length === 0 ? (
           <ChatEmptyState onSelectSuggestion={handleSuggestion} />
         ) : (
@@ -553,13 +578,13 @@ function Chat({
             toolProgress={toolProgress}
             toolProgressLog={toolProgressLog}
             chatMode={chatMode}
+            workspaceRoot={contextFolder}
             streamStall={streamStall}
             onAbort={handleAbort}
             onApprove={actions.handleApprove}
             onDeny={actions.handleDeny}
           />
         )}
-        <div ref={bottomRef} />
       </div>
 
       {planReadyForApproval && (
@@ -597,7 +622,7 @@ function Chat({
             chatMode={chatMode}
             onChatModeChange={(m) => {
               setChatMode(m);
-              if (m === "plan") setPlanSuggestion(null);
+              if (m === "plan") setModeSuggestion(null);
             }}
           />
           <ModelPicker
@@ -618,7 +643,8 @@ function Chat({
           </div>
         </div>
       )}
-    </div>
+    {rulesOpen && <RulesEditor profile={profile} onClose={() => setRulesOpen(false)} />}
+</div>
       {showWorkspace && (
         <>
           <ChatSplitResizer

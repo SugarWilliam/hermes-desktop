@@ -10,6 +10,8 @@ import {
   langCssClass,
 } from "../../../shared/markdownCodeStyle";
 import { InlineCode } from "./InlineCode";
+import { DiffApplyView } from "./DiffApplyView";
+import { MermaidDiagram } from "./MermaidDiagram";
 import {
   PRISM_BLOCK_OPTIONS,
   PRISM_BLOCK_STYLE,
@@ -112,9 +114,11 @@ function DiffView({ code }: { code: string }): React.JSX.Element {
 function CodeBlock({
   className,
   children,
+  workspaceRoot,
 }: {
   className?: string;
   children?: React.ReactNode;
+  workspaceRoot?: string;
 }): React.JSX.Element {
   const { t } = useI18n();
   const [copied, setCopied] = useState(false);
@@ -126,7 +130,12 @@ function CodeBlock({
   const rawLang = match ? match[1] : "";
   const language = inferFenceLanguage(code, rawLang);
   const isDiff = language === "diff";
-  const langLabel = isDiff ? "diff" : language || "code";
+  const isMermaid = language === "mermaid";
+  const langLabel = isDiff
+    ? "diff"
+    : isMermaid
+      ? "mermaid"
+      : language || "code";
   const langClass = langCssClass(language || "text");
 
   useEffect(() => {
@@ -141,9 +150,7 @@ function CodeBlock({
     setTimeout(() => setCopied(false), 2000);
   }
 
-  const fallbackPre = (
-    <pre className="md-code-fallback">{code}</pre>
-  );
+  const fallbackPre = <pre className="md-code-fallback">{code}</pre>;
 
   return (
     <div className={`chat-code-block ${langClass}`}>
@@ -153,7 +160,11 @@ function CodeBlock({
           {copied ? t("common.copied") : <Copy size={13} />}
         </button>
       </div>
-      {isDiff ? (
+      {isMermaid ? (
+        <MermaidDiagram code={code} />
+      ) : isDiff && workspaceRoot ? (
+        <DiffApplyView code={code} workspaceRoot={workspaceRoot} />
+      ) : isDiff ? (
         <DiffView code={code} />
       ) : highlighterReady && _highlighterMod ? (
         <_highlighterMod.Prism
@@ -211,17 +222,15 @@ const AgentMarkdown = memo(function AgentMarkdown({
   children,
   variant = "chat",
   className,
+  workspaceRoot,
 }: {
   children: string;
   variant?: AgentMarkdownVariant;
   className?: string;
+  workspaceRoot?: string;
 }): React.JSX.Element {
   const slugger = useMemo(() => createUniqueSlugger(), [children]);
-  const rootClass = [
-    "agent-markdown",
-    `agent-markdown--${variant}`,
-    className,
-  ]
+  const rootClass = ["agent-markdown", `agent-markdown--${variant}`, className]
     .filter(Boolean)
     .join(" ");
 
@@ -311,9 +320,7 @@ const AgentMarkdown = memo(function AgentMarkdown({
             <MarkdownTableCell isHeader>{thChildren}</MarkdownTableCell>
           ),
           td: ({ children: tdChildren }) => (
-            <MarkdownTableCell isHeader={false}>
-              {tdChildren}
-            </MarkdownTableCell>
+            <MarkdownTableCell isHeader={false}>{tdChildren}</MarkdownTableCell>
           ),
           pre: ({ children }) => <>{children}</>,
           code: ({ className: codeClass, children: codeChildren }) => {
@@ -321,10 +328,12 @@ const AgentMarkdown = memo(function AgentMarkdown({
             const text = String(codeChildren ?? "");
             const isInline = !isFenced && !text.includes("\n");
             if (isInline) {
-              return <InlineCode text={text} />;
+              return <InlineCode text={text} workspaceRoot={workspaceRoot} />;
             }
             return (
-              <CodeBlock className={codeClass}>{codeChildren}</CodeBlock>
+              <CodeBlock className={codeClass} workspaceRoot={workspaceRoot}>
+                {codeChildren}
+              </CodeBlock>
             );
           },
         }}

@@ -40,6 +40,11 @@ import { readModels } from "./models";
 import { HIDDEN_SUBPROCESS_OPTIONS } from "./process-options";
 import { type Attachment, escapeXmlAttr } from "../shared/attachments";
 import { buildApiHealthHeaders } from "../shared/apiHealthHeaders";
+import { getApplicableRulesPrompt } from "./rules";
+import { getApplicableMragContext } from "./mrag/index";
+import { listInstalledSkills, getDisabledSkills } from "./skills";
+import { getHighPriorityMemories } from "./memory";
+import { getRecentSessionsContext } from "./sessions";
 
 const LOCAL_API_URL = "http://127.0.0.1:8642";
 
@@ -192,6 +197,72 @@ const URL_KEY_MAP: Array<{ pattern: RegExp; envKey: string }> = [
 
 interface ChatHandle {
   abort: () => void;
+}
+
+// ────────────────────────────────────────────────────
+//  Chunk batching — reduce IPC overhead during fast
+//  streaming by coalescing rapid deltas into fewer,
+//  larger send operations. The renderer reacts to
+//  every chunk-received event with a React setState,
+//  so sending 100 micro-chunks per second causes
+//  visible layout thrashing. Batching eliminates that
+//  without changing the observable text rate.
+// ────────────────────────────────────────────────────
+
+const CHUNK_BATCH_MS = 16;        // one frame @ 60 Hz
+const CHUNK_BATCH_SIZE = 64;      // flush once we have this many chars
+const CHUNK_BATCH_MAX_MS = 40;    // never hold longer than this
+
+class ChunkBatcher {
+  private buffer = "";
+  private timer: ReturnType<typeof setTimeout> | null = null;
+  private firstAppended = 0;
+
+  constructor(private readonly onFlush: (text: string) => void) {}
+
+  append(text: string): void {
+    if (this.buffer.length === 0) this.firstAppended = Date.now();
+    this.buffer += text;
+
+    if (this.buffer.length >= CHUNK_BATCH_SIZE) {
+      this.flush();
+      return;
+    }
+
+    if (!this.timer) {
+      this.timer = setTimeout(() => this.flush(), CHUNK_BATCH_MS);
+    }
+  }
+
+  flush(): void {
+    this.clearTimer();
+    if (this.buffer.length === 0) return;
+    const text = this.buffer;
+    this.buffer = "";
+    this.onFlush(text);
+  }
+
+  /** Force flush and avoid losing trailing text when the stream ends. */
+  forceFlush(): void {
+    const elapsed = Date.now() - this.firstAppended;
+    // Flush if we've held data longer than the max threshold,
+    // or if there's buffered content (timer hasn't fired yet).
+    if (this.buffer.length > 0 && (elapsed >= CHUNK_BATCH_MAX_MS || !this.timer)) {
+      this.flush();
+    }
+  }
+
+  private clearTimer(): void {
+    if (this.timer) {
+      clearTimeout(this.timer);
+      this.timer = null;
+    }
+  }
+
+  destroy(): void {
+    this.clearTimer();
+    this.buffer = "";
+  }
 }
 
 // ────────────────────────────────────────────────────
@@ -509,6 +580,80 @@ function sendMessageViaApi(
     messages.unshift({ role: "system", content: expanded.capabilitySystem });
   }
 
+  // Inject applicable rules (always_on + glob-matched)
+  const rulesPrompt = getApplicableRulesPrompt(
+    contextFolder ? [contextFolder] : undefined,
+    profile,
+  );
+  if (rulesPrompt) {
+    messages.unshift({ role: "system", content: rulesPrompt });
+  }
+
+  // Inject MRAG knowledge base context for the user's query
+  try {
+    const mragContext = getApplicableMragContext(
+      message,
+      contextFolder ?? undefined,
+      undefined,
+      profile,
+    );
+    if (mragContext) {
+      messages.unshift({ role: "system", content: mragContext });
+    }
+  } catch {
+    // MRAG is best-effort — never block the chat on index errors
+  }
+
+  // Inject enabled skills as context (best-effort)
+  try {
+    const skills = listInstalledSkills(profile);
+    const disabled = getDisabledSkills(profile);
+    if (skills.length > 0) {
+      const enabledSkills = skills.filter((s) => !disabled.has(s.name + "/" + s.category));
+      if (enabledSkills.length > 0) {
+        const skillLines = enabledSkills.map(
+          (s) => `- **${s.name}**: ${s.description || "No description"}`,
+        );
+        messages.unshift({
+          role: "system",
+          content:
+            "## Available Skills\n\n" +
+            "The following skills are available. Use them when relevant to the user's request:\n\n" +
+            skillLines.join("\n"),
+        });
+      }
+    }
+  } catch {
+    // Skills injection is best-effort
+  }
+
+  // Inject high-priority memory context (best-effort)
+  try {
+    const highPrioMemories = getHighPriorityMemories(profile);
+    if (highPrioMemories.length > 0) {
+      const memContext = highPrioMemories.slice(0, 3).join("\n---\n");
+      messages.unshift({
+        role: "system",
+        content:
+          "## Relevant Memories\n\n" +
+          "The following high-priority memories may be relevant:\n\n" +
+          memContext,
+      });
+    }
+  } catch {
+    // Memory injection is best-effort
+  }
+
+  // Inject recent session context (best-effort)
+  try {
+    const recentCtx = getRecentSessionsContext(3);
+    if (recentCtx) {
+      messages.unshift({ role: "system", content: recentCtx });
+    }
+  } catch {
+    // Cross-session context is best-effort
+  }
+
   const body = JSON.stringify({
     model: mc.model || "hermes-agent",
     messages,
@@ -573,12 +718,18 @@ function sendMessageViaApi(
   let hasContent = false;
   let finished = false; // guard against double callbacks
   let lastError = ""; // capture embedded error messages
-  const streamStartedAt = Date.now();
+  let streamStartedAt = Date.now();
   const idleLimitMs =
     chatMode === "agent" || chatMode === "plan" ? 600_000 : 120_000;
   const wallLimitMs =
     chatMode === "agent" || chatMode === "plan" ? 1_800_000 : 600_000;
   let lastActivityAt = Date.now();
+
+  // Chunk batcher for content text — coalesces rapid SSE deltas
+  // into fewer, larger IPC sends to reduce React setState churn.
+  const chunkBatcher = new ChunkBatcher((text) => {
+    cb.onChunk(text);
+  });
 
   function touchActivity(): void {
     lastActivityAt = Date.now();
@@ -612,6 +763,8 @@ function sendMessageViaApi(
   function finish(error?: string): void {
     if (finished) return;
     finished = true;
+    chunkBatcher.forceFlush();
+    chunkBatcher.destroy();
     clearWatchdog();
     console.log(
       "[hermes] finish called:",
@@ -742,7 +895,7 @@ function sendMessageViaApi(
         } else {
           hasContent = true;
           touchActivity();
-          cb.onChunk(delta.content);
+          chunkBatcher.append(delta.content);
         }
       }
     } catch {
@@ -751,111 +904,164 @@ function sendMessageViaApi(
     return false;
   }
 
-  const chatUrl = `${getApiUrl()}/v1/chat/completions`;
-  const requester = chatUrl.startsWith("https") ? https.request : http.request;
-  const req = requester(
-    chatUrl,
-    {
-      method: "POST",
-      headers,
-      signal: controller.signal,
-      timeout: 120000,
-    },
-    (res) => {
-      const sid = res.headers["x-hermes-session-id"];
-      if (sid && typeof sid === "string" && sid !== sessionId) {
-        sessionId = sid;
-        cb.onSessionId?.(sessionId);
-      }
+  // ── Retry-aware HTTP request (exponential backoff) ──
+  let retryCount = 0;
+  const MAX_RETRIES = 3;
+  let retryTimer: NodeJS.Timeout | null = null;
+  let retrySessionId: string | null = null;
 
-      if (res.statusCode !== 200) {
-        let errBody = "";
-        res.on("data", (d) => {
-          errBody += d.toString();
-        });
-        res.on("end", () => {
-          try {
-            const err = JSON.parse(errBody);
-            finish(err.error?.message || `API error ${res.statusCode}`);
-          } catch {
-            finish(
-              `API server returned ${res.statusCode}: ${errBody.slice(0, 200)}`,
-            );
-          }
-        });
-        return;
-      }
+  function isRetryableError(statusCode?: number): boolean {
+    if (!statusCode) return true; // Network error / timeout
+    return statusCode >= 500 || statusCode === 429;
+  }
 
-      let buffer = "";
+  function attemptRetry(errMsg: string, statusCode?: number): void {
+    if (finished) return;
+    if (!isRetryableError(statusCode)) {
+      finish(errMsg);
+      return;
+    }
+    if (retryCount >= MAX_RETRIES) {
+      finish(`${errMsg} (retried ${MAX_RETRIES} times)`);
+      return;
+    }
+    retryCount++;
+    const delay = Math.pow(2, retryCount) * 1000; // 2s, 4s, 8s
+    if (sessionId) retrySessionId = sessionId;
+    // Reset timers so watchdog doesn't fire during retry wait
+    hasContent = false;
+    lastError = "";
+    lastActivityAt = Date.now();
+    streamStartedAt = Date.now();
+    retryTimer = setTimeout(() => {
+      retryTimer = null;
+      makeRequest();
+    }, delay);
+  }
 
-      /** Parse an SSE block which may contain `event:` and `data:` lines. */
-      function processSseBlock(block: string): boolean {
-        let eventType = "";
-        let dataLine = "";
-        for (const line of block.split("\n")) {
-          if (line.startsWith("event: ")) {
-            eventType = line.slice(7).trim();
-          } else if (line.startsWith("data: ")) {
-            dataLine = line.slice(6);
-          }
+  function makeRequest(): void {
+    const chatUrl = `${getApiUrl()}/v1/chat/completions`;
+    const requester = chatUrl.startsWith("https") ? https.request : http.request;
+    const requestHeaders: Record<string, string> = { ...headers };
+    if (retrySessionId) {
+      requestHeaders["X-Hermes-Session-Id"] = retrySessionId;
+    }
+
+    const req = requester(
+      chatUrl,
+      {
+        method: "POST",
+        headers: requestHeaders,
+        signal: controller.signal,
+        timeout: 120000,
+      },
+      (res) => {
+        const sid = res.headers["x-hermes-session-id"];
+        if (sid && typeof sid === "string" && sid !== sessionId) {
+          sessionId = sid;
+          retrySessionId = sid;
+          cb.onSessionId?.(sessionId);
         }
-        if (!dataLine) return false;
-        if (eventType) {
-          // Custom event (e.g. hermes.tool.progress) — never signals [DONE]
-          processCustomEvent(eventType, dataLine);
-          return false;
-        }
-        return processSseData(dataLine);
-      }
 
-      res.on("data", (chunk: Buffer) => {
-        touchActivity();
-        buffer += chunk.toString();
-        const parts = buffer.split("\n\n");
-        buffer = parts.pop() || "";
-
-        for (const part of parts) {
-          if (processSseBlock(part)) return;
-        }
-      });
-
-      res.on("end", () => {
-        if (buffer.trim()) {
-          for (const part of buffer.split("\n\n")) {
-            if (processSseBlock(part)) return;
-          }
-        }
-        // Signal completion — even when no content was received
-        if (!hasContent && !lastError) {
-          probeRealError();
+        if (res.statusCode !== 200) {
+          let errBody = "";
+          res.on("data", (d) => {
+            errBody += d.toString();
+          });
+          res.on("end", () => {
+            try {
+              const err = JSON.parse(errBody);
+              attemptRetry(
+                err.error?.message || `API error ${res.statusCode}`,
+                res.statusCode,
+              );
+            } catch {
+              attemptRetry(
+                `API server returned ${res.statusCode}: ${errBody.slice(0, 200)}`,
+                res.statusCode,
+              );
+            }
+          });
           return;
         }
-        finish(hasContent ? undefined : lastError);
-      });
 
-      res.on("error", (err) => {
-        if (err.message === "aborted" || err.name === "AbortError") return;
-        finish(`Stream error: ${err.message}`);
-      });
-    },
-  );
+        let buffer = "";
 
-  req.on("error", (err) => {
-    if (err.name === "AbortError") return;
-    finish(`API request failed: ${err.message}`);
-  });
-  req.on("timeout", () => {
-    req.destroy();
-    finish(
-      "API request timed out. Check the SSH tunnel and remote Hermes gateway.",
+        /** Parse an SSE block which may contain `event:` and `data:` lines. */
+        function processSseBlock(block: string): boolean {
+          let eventType = "";
+          let dataLine = "";
+          for (const line of block.split("\n")) {
+            if (line.startsWith("event: ")) {
+              eventType = line.slice(7).trim();
+            } else if (line.startsWith("data: ")) {
+              dataLine = line.slice(6);
+            }
+          }
+          if (!dataLine) return false;
+          if (eventType) {
+            // Custom event (e.g. hermes.tool.progress) — never signals [DONE]
+            processCustomEvent(eventType, dataLine);
+            return false;
+          }
+          return processSseData(dataLine);
+        }
+
+        res.on("data", (chunk: Buffer) => {
+          touchActivity();
+          buffer += chunk.toString();
+          const parts = buffer.split("\n\n");
+          buffer = parts.pop() || "";
+
+          for (const part of parts) {
+            if (processSseBlock(part)) return;
+          }
+        });
+
+        res.on("end", () => {
+          if (buffer.trim()) {
+            for (const part of buffer.split("\n\n")) {
+              if (processSseBlock(part)) return;
+            }
+          }
+          // Signal completion — even when no content was received
+          if (!hasContent && !lastError) {
+            probeRealError();
+            return;
+          }
+          finish(hasContent ? undefined : lastError);
+        });
+
+        res.on("error", (err) => {
+          if (err.message === "aborted" || err.name === "AbortError") return;
+          attemptRetry(`Stream error: ${err.message}`);
+        });
+      },
     );
-  });
 
-  req.write(body);
-  req.end();
+    req.on("error", (err) => {
+      if (err.name === "AbortError") return;
+      attemptRetry(`API request failed: ${err.message}`);
+    });
+    req.on("timeout", () => {
+      req.destroy();
+      attemptRetry(
+        "API request timed out. Check the SSH tunnel and remote Hermes gateway.",
+      );
+    });
+
+    req.write(body);
+    req.end();
+  }
+
+  makeRequest();
 
   return {
     abort: () => {
+      if (retryTimer) {
+        clearTimeout(retryTimer);
+        retryTimer = null;
+      }
       controller.abort();
     },
   };

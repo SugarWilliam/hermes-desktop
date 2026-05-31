@@ -1,3 +1,5 @@
+import { writeFile } from "fs/promises";
+import { readdirSync, statSync, existsSync } from "fs";
 import {
   app,
   shell,
@@ -21,6 +23,7 @@ import {
   pickWorkspaceFiles,
   getWorkspaceGitStatus,
 } from "./workspace";
+import { applyUnifiedDiff } from "./diff";
 import { readLocalAttachmentFile } from "./localAttachmentFile";
 import {
   buildWebContentsContextMenu,
@@ -118,7 +121,14 @@ import {
   getSessionMessages,
   searchSessions,
   deleteSession,
+  exportSessionAsMarkdown,
+  exportSessionAsJson,
 } from "./sessions";
+import {
+  shouldSuggestSummarization,
+  generateSessionDigest,
+  digestToMemoryEntry,
+} from "./session-summarizer";
 import {
   syncSessionCache,
   listCachedSessions,
@@ -138,7 +148,36 @@ import {
   updateMemoryEntry,
   removeMemoryEntry,
   writeUserProfile,
+  getMemoryCategories,
+  getMemoryByCategory,
 } from "./memory";
+import { searchMemory as searchMemoryFts } from "./memory-index";
+import { listSpecs, readSpec, createSpec, updateSpec, deleteSpec } from "./specs";
+import { parsePlanOutput } from "./plan-parser";
+import {
+  listRules,
+  readRuleContent,
+  createRule,
+  updateRule,
+  deleteRule,
+  installPresetRules,
+  matchGlobRules,
+  type RuleType,
+} from "./rules";
+import {
+  createKB,
+  listKBs,
+  getKBInfo,
+  renameKB,
+  deleteKB,
+  indexKB,
+  incrementalIndexKB,
+  addDocToKB,
+  removeDocFromKB,
+  searchKB,
+  searchAllKBs,
+  getKBChunkCount,
+} from "./mrag/index";
 import { readSoul, writeSoul, resetSoul } from "./soul";
 import { getToolsets, setToolsetEnabled } from "./tools";
 import {
@@ -147,6 +186,8 @@ import {
   getSkillContent,
   installSkill,
   uninstallSkill,
+  getDisabledSkills,
+  setSkillEnabled,
 } from "./skills";
 import {
   listCronJobs,
@@ -1125,6 +1166,98 @@ function setupIPC(): void {
     return deleteSession(sessionId);
   });
 
+  // Session summarization
+  ipcMain.handle(
+    "check-summarization-triggers",
+    (_event, sessionId: string, messageCount: number, lastActivity: number) => {
+      return shouldSuggestSummarization(sessionId, messageCount, lastActivity);
+    },
+  );
+  ipcMain.handle(
+    "generate-session-digest",
+    (_event, sessionId: string, title: string, startedAt: number, messageCount: number, messages: Array<{ role: string; content: string }>) => {
+      return generateSessionDigest(sessionId, title, startedAt, messageCount, messages);
+    },
+  );
+  ipcMain.handle(
+    "digest-to-memory-entry",
+    (_event, digest: { sessionId: string; title: string; startedAt: number; messageCount: number; keyTopics: string[]; summary: string }) => {
+      return digestToMemoryEntry(digest);
+    },
+  );
+
+  // Specs management
+  ipcMain.handle(
+    "list-specs",
+    (_event, profile?: string) => {
+      return listSpecs(profile);
+    },
+  );
+  ipcMain.handle(
+    "read-spec",
+    (_event, name: string, profile?: string) => {
+      return readSpec(name, profile);
+    },
+  );
+  ipcMain.handle(
+    "create-spec",
+    (_event, meta: import("./specs").SpecMeta, body: string, profile?: string) => {
+      return createSpec(meta, body, profile);
+    },
+  );
+  ipcMain.handle(
+    "update-spec",
+    (_event, name: string, updates: Partial<import("./specs").SpecMeta> & { body?: string }, profile?: string) => {
+      return updateSpec(name, updates, profile);
+    },
+  );
+  ipcMain.handle(
+    "delete-spec",
+    (_event, name: string, profile?: string) => {
+      return deleteSpec(name, profile);
+    },
+  );
+  ipcMain.handle(
+    "parse-plan",
+    (_event, text: string) => {
+      return parsePlanOutput(text);
+    },
+  );
+
+  ipcMain.handle(
+    "export-session",
+    async (_event, sessionId: string, format: "markdown" | "json") => {
+      const content =
+        format === "json"
+          ? exportSessionAsJson(sessionId)
+          : exportSessionAsMarkdown(sessionId);
+
+      if (!content) return { success: false, error: "Session not found" };
+
+      const ext = format === "json" ? "json" : "md";
+      const { canceled, filePath } = await dialog.showSaveDialog({
+        defaultPath: `session-${sessionId.slice(0, 8)}.${ext}`,
+        filters: [
+          format === "json"
+            ? { name: "JSON", extensions: ["json"] }
+            : { name: "Markdown", extensions: ["md"] },
+        ],
+      });
+
+      if (canceled || !filePath) return { success: false, canceled: true };
+
+      try {
+        await writeFile(filePath, content, "utf-8");
+        return { success: true, path: filePath };
+      } catch (err) {
+        return {
+          success: false,
+          error: err instanceof Error ? err.message : "Write failed",
+        };
+      }
+    },
+  );
+
   // Profiles
   ipcMain.handle("list-profiles", async () => {
     const conn = getConnectionConfig();
@@ -1189,6 +1322,194 @@ function setupIPC(): void {
       if (conn.mode === "ssh" && conn.ssh)
         return sshWriteUserProfile(conn.ssh, content, profile);
       return writeUserProfile(content, profile);
+    },
+  );
+
+  // Memory search (FTS)
+  ipcMain.handle("search-memory", (_event, query: string, profile?: string) => {
+    return searchMemoryFts(query, 10, profile);
+  });
+
+  // Rules
+
+  function searchWorkspaceFiles(root: string, query: string): string[] {
+    try {
+      const results: string[] = [];
+      const lowerQuery = query.toLowerCase();
+      const maxResults = 20;
+      const maxDepth = 5;
+
+      function walk(dir: string, depth: number) {
+        if (depth > maxDepth || results.length >= maxResults) return;
+        try {
+          for (const entry of readdirSync(dir)) {
+            if (results.length >= maxResults) return;
+            if (entry.startsWith(".") || entry === "node_modules") continue;
+            const full = join(dir, entry);
+            let stat;
+            try {
+              stat = statSync(full);
+            } catch {
+              continue;
+            }
+            if (stat.isDirectory()) {
+              if (entry.toLowerCase().includes(lowerQuery)) {
+                results.push(full + "/");
+              }
+              if (depth < maxDepth) walk(full, depth + 1);
+            } else {
+              if (entry.toLowerCase().includes(lowerQuery)) {
+                results.push(full);
+              }
+            }
+          }
+        } catch {
+          /* skip inaccessible dirs */
+        }
+      }
+
+      if (existsSync(root)) {
+        const rootStat = statSync(root);
+        if (rootStat.isDirectory()) {
+          walk(root, 0);
+        }
+      }
+      return results;
+    } catch {
+      return [];
+    }
+  }
+
+  // File search for @-mention autocomplete
+  ipcMain.handle(
+    "search-workspace-files",
+    (_event, root: string, query: string) => {
+      return searchWorkspaceFiles(root, query);
+    },
+  );
+
+  ipcMain.handle("list-rules", (_event, profile?: string) => {
+    return listRules(profile);
+  });
+  ipcMain.handle("read-rule-content", (_event, rulePath: string) => {
+    return readRuleContent(rulePath);
+  });
+  ipcMain.handle(
+    "create-rule",
+    (
+      _event,
+      name: string,
+      type: RuleType,
+      glob: string,
+      description: string,
+      body: string,
+      priority: number,
+      profile?: string,
+    ) => {
+      return createRule(name, type, glob, description, body, priority, profile);
+    },
+  );
+  ipcMain.handle(
+    "update-rule",
+    (
+      _event,
+      name: string,
+      updates: {
+        type?: RuleType;
+        glob?: string;
+        description?: string;
+        body?: string;
+        priority?: number;
+      },
+      profile?: string,
+    ) => {
+      return updateRule(name, updates, profile);
+    },
+  );
+  ipcMain.handle("delete-rule", (_event, name: string, profile?: string) => {
+    return deleteRule(name, profile);
+  });
+  ipcMain.handle(
+    "match-glob-rules",
+    (_event, filePath: string, profile?: string) => {
+      return matchGlobRules(filePath, profile);
+    },
+  );
+
+  // MRAG (Multi-modal RAG)
+  ipcMain.handle(
+    "mrag-create-kb",
+    (_event, name: string, profile?: string) => {
+      return createKB(name, profile);
+    },
+  );
+  ipcMain.handle("mrag-list-kbs", (_event, profile?: string) => {
+    return listKBs(profile);
+  });
+  ipcMain.handle(
+    "mrag-get-kb-info",
+    (_event, key: string, profile?: string) => {
+      return getKBInfo(key, profile);
+    },
+  );
+  ipcMain.handle(
+    "mrag-rename-kb",
+    (_event, key: string, newName: string, profile?: string) => {
+      return renameKB(key, newName, profile);
+    },
+  );
+  ipcMain.handle(
+    "mrag-delete-kb",
+    (_event, key: string, profile?: string) => {
+      return deleteKB(key, profile);
+    },
+  );
+  ipcMain.handle(
+    "mrag-index-kb",
+    (_event, key: string, docDir: string, profile?: string) => {
+      return indexKB(key, docDir, profile);
+    },
+  );
+  ipcMain.handle(
+    "mrag-incremental-index-kb",
+    (_event, key: string, docDir: string, profile?: string) => {
+      return incrementalIndexKB(key, docDir, profile);
+    },
+  );
+  ipcMain.handle(
+    "mrag-add-doc",
+    (_event, key: string, filePath: string, profile?: string) => {
+      return addDocToKB(key, filePath, profile);
+    },
+  );
+  ipcMain.handle(
+    "mrag-remove-doc",
+    (_event, key: string, docPath: string, profile?: string) => {
+      removeDocFromKB(key, docPath, profile);
+    },
+  );
+  ipcMain.handle(
+    "mrag-search-kb",
+    (
+      _event,
+      key: string,
+      query: string,
+      topK: number,
+      profile?: string,
+    ) => {
+      return searchKB(key, query, topK, profile);
+    },
+  );
+  ipcMain.handle(
+    "mrag-search-all-kbs",
+    (_event, query: string, topK: number, profile?: string) => {
+      return searchAllKBs(query, topK, profile);
+    },
+  );
+  ipcMain.handle(
+    "mrag-get-chunk-count",
+    (_event, key: string, profile?: string) => {
+      return getKBChunkCount(key, profile);
     },
   );
 
@@ -1261,6 +1582,34 @@ function setupIPC(): void {
       if (conn.mode === "ssh" && conn.ssh)
         return sshUninstallSkill(conn.ssh, name);
       return uninstallSkill(name, _profile);
+    },
+  );
+
+  // Skills enable/disable
+  ipcMain.handle(
+    "get-disabled-skills",
+    (_event, profile?: string) => {
+      return [...getDisabledSkills(profile)];
+    },
+  );
+  ipcMain.handle(
+    "set-skill-enabled",
+    (_event, name: string, enabled: boolean, profile?: string) => {
+      return setSkillEnabled(name, enabled, profile);
+    },
+  );
+
+  // Memory categories
+  ipcMain.handle(
+    "get-memory-categories",
+    (_event, profile?: string) => {
+      return getMemoryCategories(profile);
+    },
+  );
+  ipcMain.handle(
+    "get-memory-by-category",
+    (_event, category: string, profile?: string) => {
+      return getMemoryByCategory(category, profile);
     },
   );
 
@@ -1549,6 +1898,16 @@ function setupIPC(): void {
     const win = BrowserWindow.fromWebContents(event.sender);
     return pickWorkspaceFiles(win);
   });
+  ipcMain.handle(
+    "apply-diff",
+    async (
+      _event,
+      root: string,
+      diff: string,
+    ): Promise<Awaited<ReturnType<typeof applyUnifiedDiff>>> => {
+      return applyUnifiedDiff(root, diff);
+    },
+  );
   ipcMain.handle(
     "kanban-assign-task",
     (_event, taskId: string, assignee: string | null, profile?: string) =>
@@ -1844,6 +2203,7 @@ if (process.env.ENABLE_CDP === "1") {
 }
 
 app.whenReady().then(() => {
+  installPresetRules();
   app.name = "Hermes";
   electronApp.setAppUserModelId("com.nousresearch.hermes");
 

@@ -1,4 +1,4 @@
-import { memo, useCallback, useRef, useState } from "react";
+import { memo, useCallback, useState } from "react";
 import {
   FileText,
   FolderOpen,
@@ -13,6 +13,7 @@ import {
 } from "./WorkspaceExplorerTree";
 import { useI18n } from "../../components/useI18n";
 import { AgentMarkdown } from "../../components/AgentMarkdown";
+import { CodeEditor } from "../../components/CodeEditor";
 import {
   formatWorkspaceFolderReference,
   formatWorkspaceSelectionReference,
@@ -55,7 +56,6 @@ export const WorkspacePanel = memo(function WorkspacePanel({
   const [explorerSide, setExplorerSide] = useState<ExplorerSide>(readExplorerSide);
   const [explorerWidth, setExplorerWidth] = useState(readExplorerWidth);
   const [error, setError] = useState<string | null>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const isMarkdown =
     selectedFile != null && /\.(md|markdown)$/i.test(selectedFile);
 
@@ -117,10 +117,7 @@ export const WorkspacePanel = memo(function WorkspacePanel({
         }
         if (action === "add-selection") {
           const sel =
-            textareaRef.current?.value.substring(
-              textareaRef.current.selectionStart,
-              textareaRef.current.selectionEnd,
-            ) ?? window.getSelection()?.toString() ?? "";
+            window.getSelection()?.toString() ?? "";
           if (!sel.trim()) return;
           onAppendReference(formatWorkspaceSelectionReference(selectedFile));
         }
@@ -166,10 +163,7 @@ export const WorkspacePanel = memo(function WorkspacePanel({
     (e: React.MouseEvent): void => {
       e.preventDefault();
       const hasSelection =
-        (textareaRef.current &&
-          textareaRef.current.selectionStart !==
-            textareaRef.current.selectionEnd) ||
-        (preview && (window.getSelection()?.toString().trim().length ?? 0) > 0);
+        preview && (window.getSelection()?.toString().trim().length ?? 0) > 0;
       const items: Array<{
         id: MenuAction;
         label: string;
@@ -289,12 +283,11 @@ export const WorkspacePanel = memo(function WorkspacePanel({
                 <AgentMarkdown variant="document">{draft}</AgentMarkdown>
               </div>
             ) : (
-              <textarea
-                ref={textareaRef}
-                className="chat-workspace-textarea"
+              <CodeEditor
+                filePath={selectedFile}
                 value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                spellCheck={false}
+                onChange={setDraft}
+                onSave={handleSave}
               />
             )}
           </div>

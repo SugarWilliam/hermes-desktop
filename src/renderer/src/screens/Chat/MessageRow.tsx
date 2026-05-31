@@ -20,6 +20,7 @@ interface MessageRowProps {
   msg: ChatMessage;
   isLast: boolean;
   isLoading: boolean;
+  workspaceRoot?: string | null;
   onApprove: () => void;
   onDeny: () => void;
 }
@@ -28,6 +29,7 @@ export const MessageRow = memo(function MessageRow({
   msg,
   isLast,
   isLoading,
+  workspaceRoot,
   onApprove,
   onDeny,
 }: MessageRowProps): React.JSX.Element {
@@ -86,7 +88,7 @@ export const MessageRow = memo(function MessageRow({
           segments.map((segment) =>
             segment.type === "text" ? (
               segment.value.trim() ? (
-                <AgentMarkdown key={`t-${segment.start}`} variant="chat">
+                <AgentMarkdown key={`t-${segment.start}`} variant="chat" workspaceRoot={workspaceRoot ?? undefined}>
                   {segment.value}
                 </AgentMarkdown>
               ) : null
@@ -100,7 +102,7 @@ export const MessageRow = memo(function MessageRow({
             ),
           )
         ) : (
-          <AgentMarkdown variant="chat">{msg.content}</AgentMarkdown>
+          <AgentMarkdown variant="chat" workspaceRoot={workspaceRoot ?? undefined}>{msg.content}</AgentMarkdown>
         )}
       </div>
       {showApprovalBar && (

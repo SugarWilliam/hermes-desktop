@@ -17,6 +17,9 @@ import Models from "../Models/Models";
 import Providers from "../Providers/Providers";
 import Schedules from "../Schedules/Schedules";
 import Kanban from "../Kanban/Kanban";
+import { RulesEditor } from "../../components/RulesEditor";
+import Mrag from "../Mrag/Mrag";
+import Specs from "../Specs/Specs";
 import RemoteNotice from "../../components/RemoteNotice";
 import VerifyWarningBanner from "../../components/VerifyWarningBanner";
 import { Download, PanelLeft, PanelLeftClose } from "../../assets/icons";
@@ -425,6 +428,25 @@ function Layout({
             ) : (
               <Gateway profile={activeProfile} />
             )}
+          </div>
+        )}
+
+
+        {visitedViews.has("rules") && (
+          <div style={paneStyle("rules")}>
+            <RulesEditor profile={activeProfile} onClose={() => goTo("chat")} />
+          </div>
+        )}
+
+        {visitedViews.has("mrag") && (
+          <div style={paneStyle("mrag")}>
+            <Mrag profile={activeProfile} />
+          </div>
+        )}
+
+        {visitedViews.has("specs") && (
+          <div style={paneStyle("specs")}>
+            <Specs profile={activeProfile} />
           </div>
         )}
 

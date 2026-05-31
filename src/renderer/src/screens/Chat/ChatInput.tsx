@@ -91,8 +91,16 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
     const [slashSelectedIndex, setSlashSelectedIndex] = useState(0);
     const [attachments, setAttachments] = useState<Attachment[]>([]);
     const [attachmentError, setAttachmentError] = useState<string | null>(null);
+    const [mentionOpen, setMentionOpen] = useState(false);
+    const [mentionQuery, setMentionQuery] = useState("");
+    const [mentionResults, setMentionResults] = useState<string[]>([]);
+    const [mentionSelectedIndex, setMentionSelectedIndex] = useState(0);
+    const [mentionDebounce, setMentionDebounce] = useState<ReturnType<
+      typeof setTimeout
+    > | null>(null);
     const inputRef = useRef<HTMLTextAreaElement>(null);
     const slashMenuRef = useRef<HTMLDivElement>(null);
+    const mentionMenuRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const autoResize = useCallback((): void => {
@@ -162,7 +170,13 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
         }
         return errors;
       },
-      [attachments.length, formatError, sessionId, remoteMode, onAttachmentPath],
+      [
+        attachments.length,
+        formatError,
+        sessionId,
+        remoteMode,
+        onAttachmentPath,
+      ],
     );
 
     useImperativeHandle(
@@ -204,8 +218,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
         },
         addPathRef(absolutePath: string): void {
           const name =
-            absolutePath.split(/[\\/]/).filter(Boolean).pop() ||
-            absolutePath;
+            absolutePath.split(/[\\/]/).filter(Boolean).pop() || absolutePath;
           void (async (): Promise<void> => {
             if (isTextFile("", name)) {
               try {
@@ -362,6 +375,49 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       inputRef.current?.focus();
     }
 
+    // @-mention file search
+    const searchMentionFiles = useCallback(async (query: string) => {
+      try {
+        const results = await window.hermesAPI.searchWorkspaceFiles(".", query);
+        setMentionResults(results);
+      } catch {
+        setMentionResults([]);
+      }
+    }, []);
+
+    const selectMention = useCallback(
+      (path: string) => {
+        const el = inputRef.current;
+        if (!el) return;
+        const cursorPos = el.selectionStart || input.length;
+        const textBeforeCursor = input.slice(0, cursorPos);
+        const textAfterCursor = input.slice(cursorPos);
+        const atIdx = textBeforeCursor.lastIndexOf("@");
+        if (atIdx === -1) return;
+        const newText =
+          textBeforeCursor.slice(0, atIdx) + "@" + path + " " + textAfterCursor;
+        setInput(newText);
+        setMentionOpen(false);
+        setMentionResults([]);
+        requestAnimationFrame(() => {
+          const el2 = inputRef.current;
+          if (el2) {
+            const newPos = atIdx + 1 + path.length + 1;
+            el2.focus();
+            el2.selectionStart = el2.selectionEnd = newPos;
+            resizeChatTextarea(el2);
+          }
+        });
+      },
+      [input],
+    );
+
+    const dismissMention = useCallback(() => {
+      setMentionOpen(false);
+      setMentionResults([]);
+      setMentionQuery("");
+    }, []);
+
     function handleInputChange(
       e: React.ChangeEvent<HTMLTextAreaElement>,
     ): void {
@@ -370,6 +426,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
 
       requestAnimationFrame(() => resizeChatTextarea(e.target));
 
+      // Slash command detection
       if (value.startsWith("/") && !value.includes(" ")) {
         const query = value.split(" ")[0];
         setSlashMenuOpen(true);
@@ -377,6 +434,23 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
         setSlashSelectedIndex(0);
       } else if (slashMenuOpen) {
         setSlashMenuOpen(false);
+      }
+
+      // @-mention file search detection
+      const cursorPos = e.target.selectionStart || value.length;
+      const textBeforeCursor = value.slice(0, cursorPos);
+      const atMatch = textBeforeCursor.match(/@(\S*)$/);
+      if (atMatch) {
+        const query = atMatch[1];
+        setMentionOpen(true);
+        setMentionQuery(query);
+        if (mentionDebounce) clearTimeout(mentionDebounce);
+        const debounce = setTimeout(() => {
+          void searchMentionFiles(query);
+        }, 200);
+        setMentionDebounce(debounce);
+      } else if (mentionOpen) {
+        dismissMention();
       }
     }
 
@@ -411,8 +485,68 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
         }
       }
 
+      // @-mention keyboard navigation
+      if (mentionOpen && mentionResults.length > 0) {
+        if (e.key === "ArrowDown") {
+          e.preventDefault();
+          setMentionSelectedIndex((i) =>
+            i < mentionResults.length - 1 ? i + 1 : 0,
+          );
+          return;
+        }
+        if (e.key === "ArrowUp") {
+          e.preventDefault();
+          setMentionSelectedIndex((i) =>
+            i > 0 ? i - 1 : mentionResults.length - 1,
+          );
+          return;
+        }
+        if (e.key === "Enter" || e.key === "Tab") {
+          e.preventDefault();
+          selectMention(mentionResults[mentionSelectedIndex]);
+          return;
+        }
+        if (e.key === "Escape") {
+          e.preventDefault();
+          dismissMention();
+          return;
+        }
+      }
+
+      // @-mention keyboard navigation
+      if (mentionOpen && mentionResults.length > 0) {
+        if (e.key === "ArrowDown") {
+          e.preventDefault();
+          setMentionSelectedIndex((i) =>
+            i < mentionResults.length - 1 ? i + 1 : 0,
+          );
+          return;
+        }
+        if (e.key === "ArrowUp") {
+          e.preventDefault();
+          setMentionSelectedIndex((i) =>
+            i > 0 ? i - 1 : mentionResults.length - 1,
+          );
+          return;
+        }
+        if (e.key === "Enter" || e.key === "Tab") {
+          e.preventDefault();
+          selectMention(mentionResults[mentionSelectedIndex]);
+          return;
+        }
+        if (e.key === "Escape") {
+          e.preventDefault();
+          dismissMention();
+          return;
+        }
+      }
+
       // History navigation: ArrowUp/Down when not in a multiline draft (or already navigating)
-      if (!slashMenuOpen && (history.isNavigating() || !input.includes("\n"))) {
+      if (
+        !slashMenuOpen &&
+        !mentionOpen &&
+        (history.isNavigating() || !input.includes("\n"))
+      ) {
         if (e.key === "ArrowUp" && history.size() > 0) {
           if (history.recallPrev()) {
             e.preventDefault();
@@ -461,6 +595,30 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
 
     return (
       <>
+        {mentionOpen && mentionResults.length > 0 && (
+          <div className="slash-menu" ref={mentionMenuRef}>
+            <div className="slash-menu-header">
+              <Paperclip size={12} />
+              {"Files matching @" + mentionQuery}
+            </div>
+            <div className="slash-menu-list">
+              {mentionResults.map((path, i) => {
+                const name = path.split("/").filter(Boolean).pop() || path;
+                return (
+                  <button
+                    key={path}
+                    className={`slash-menu-item ${i === mentionSelectedIndex ? "slash-menu-item-active" : ""}`}
+                    onMouseEnter={() => setMentionSelectedIndex(i)}
+                    onClick={() => selectMention(path)}
+                  >
+                    <span className="slash-menu-item-name">{name}</span>
+                    <span className="slash-menu-item-desc">{path}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
         {slashMenuOpen && filteredSlashCommands.length > 0 && (
           <div className="slash-menu" ref={slashMenuRef}>
             <div className="slash-menu-header">

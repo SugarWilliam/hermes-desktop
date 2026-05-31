@@ -1,4 +1,5 @@
-import { memo, useMemo } from "react";
+import { memo, useMemo, useCallback, useRef } from "react";
+import { Virtuoso } from "react-virtuoso";
 import type { ChatMode } from "../../../../shared/chatMode";
 import { MessageRow } from "./MessageRow";
 import { ReasoningRow, ToolCallRow, ToolResultRow } from "./HistoryRow";
@@ -22,6 +23,7 @@ interface MessageListProps {
   toolProgress: string | null;
   toolProgressLog: string[];
   chatMode: ChatMode;
+  workspaceRoot?: string | null;
   streamStall?: StreamStallState;
   onAbort?: () => void;
   onApprove: () => void;
@@ -44,24 +46,52 @@ function turnHasAgentActivity(turn: ChatMessage[]): boolean {
   return false;
 }
 
+// ── Item types for Virtuoso ──────────────────────────
+
+interface TurnItem {
+  type: "turn";
+  key: string;
+  turnIndex: number;
+}
+
+interface MessageItem {
+  type: "message";
+  key: string;
+  msg: ChatMessage;
+  msgIndex: number;
+  isLastMessage: boolean;
+}
+
+interface PlaceholderItem {
+  type: "placeholder";
+  key: string;
+}
+
+type VirtuosoItem = TurnItem | MessageItem | PlaceholderItem;
+
+// ── Main component ────────────────────────────────────
+
 export const MessageList = memo(function MessageList({
   messages,
   isLoading,
   toolProgress,
   toolProgressLog,
   chatMode,
+  workspaceRoot,
   streamStall,
   onAbort,
   onApprove,
   onDeny,
 }: MessageListProps): React.JSX.Element {
   const { t } = useI18n();
+  const virtuosoRef = useRef(null);
+  const agentModeUi = chatMode === "agent" || chatMode === "plan";
+
   const orderedMessages = useMemo(
     () => orderMessagesForDisplay(messages),
     [messages],
   );
 
-  const agentModeUi = chatMode === "agent" || chatMode === "plan";
   const currentTodos = useMemo(
     () => (agentModeUi ? extractCurrentTurnTodos(orderedMessages) : []),
     [orderedMessages, agentModeUi],
@@ -72,10 +102,12 @@ export const MessageList = memo(function MessageList({
     [orderedMessages],
   );
 
+  const lastTurnIndex = turns.length - 1;
+
   const hasAgentActivity = useMemo(() => {
-    const last = turns[turns.length - 1];
+    const last = turns[lastTurnIndex];
     return last ? turnHasAgentActivity(last.agent) : false;
-  }, [turns]);
+  }, [turns, lastTurnIndex]);
 
   const visibleMessages = useMemo(
     () =>
@@ -95,79 +127,81 @@ export const MessageList = memo(function MessageList({
     return null;
   }, [orderedMessages]);
 
-  if (agentModeUi) {
-    const lastTurnIndex = turns.length - 1;
-    return (
-      <>
-        {turns.map((turn, turnIndex) => {
-          const isLastTurn = turnIndex === lastTurnIndex;
-          const isLive = isLoading && isLastTurn;
-          const phases = buildAgentTurnPhases(turn.agent);
-          const liveSteps = isLive ? buildAgentRunSteps(turn.agent) : [];
-          const hasReasoningRow = turn.agent.some(
-            (m) => m.kind === "reasoning" && (m.text || "").trim(),
-          );
-          const needsApproval =
-            !isLoading &&
-            isLastTurn &&
-            !!phases.result &&
-            APPROVAL_RE.test(phases.result);
+  // ── Build Virtuoso item list ──────────────────────
 
-          const turnKey =
-            turn.user?.id ||
-            turn.agent[0]?.id ||
-            `turn-${turnIndex}`;
+  const virtuosoItems = useMemo((): VirtuosoItem[] => {
+    if (agentModeUi) {
+      const items: VirtuosoItem[] = [];
+      for (let i = 0; i < turns.length; i++) {
+        items.push({
+          type: "turn",
+          key: turns[i].user?.id || turns[i].agent[0]?.id || `turn-${i}`,
+          turnIndex: i,
+        });
+      }
+      if (isLoading && turns.length === 0) {
+        items.push({ type: "placeholder", key: "loading-placeholder" });
+      }
+      return items;
+    }
 
+    // Chat mode: each visible message is an item
+    const items: VirtuosoItem[] = visibleMessages.map((msg, i) => ({
+      type: "message",
+      key: msg.id,
+      msg,
+      msgIndex: i,
+      isLastMessage: i === visibleMessages.length - 1,
+    }));
+
+    if (isLoading && !hasAgentActivity) {
+      items.push({ type: "placeholder", key: "typing-placeholder" });
+    }
+    return items;
+  }, [agentModeUi, turns, isLoading, visibleMessages, hasAgentActivity]);
+
+  // Virtuoso follow behavior: auto-follow during streaming, respect user scroll otherwise
+  const followOutput = useCallback(() => isLoading, [isLoading]);
+
+  // ── Render function for Virtuoso ──────────────────
+
+  const renderItem = useCallback(
+    (_index: number, item: VirtuosoItem) => {
+      if (item.type === "placeholder") {
+        if (agentModeUi) {
           return (
-            <div key={turnKey} className="chat-paradigm-turn">
-              {turn.user && isBubble(turn.user) && turn.user.role === "user" && (
-                <DialogueBlock msg={turn.user} />
-              )}
-              {(turn.agent.length > 0 || isLive) && (
-                <div className="chat-transcript-block chat-transcript-block--agent">
-                  <AgentTurnView
-                    phases={phases}
-                    isLive={isLive}
-                    toolProgress={isLive ? toolProgress : null}
-                    toolProgressLog={isLive ? toolProgressLog : []}
-                    liveSteps={liveSteps}
-                    todos={isLive ? currentTodos : []}
-                    showThinkingPlaceholder={isLive && !hasReasoningRow}
-                    isLast={isLastTurn}
-                    needsApproval={needsApproval}
-                    streamStall={isLive ? streamStall : undefined}
-                    onAbort={onAbort}
-                    onApprove={onApprove}
-                    onDeny={onDeny}
-                  />
-                </div>
-              )}
+            <div className="chat-transcript-block chat-transcript-block--agent">
+              <AgentTurnView
+                phases={{ reasoning: "", execution: [], result: "" }}
+                isLive
+                toolProgress={toolProgress}
+                toolProgressLog={toolProgressLog}
+                liveSteps={[]}
+                todos={currentTodos}
+                showThinkingPlaceholder
+                isLast
+                workspaceRoot={workspaceRoot}
+                chatMode={chatMode}
+                streamStall={streamStall}
+                onAbort={onAbort}
+              />
             </div>
           );
-        })}
-        {isLoading && turns.length === 0 && (
-          <div className="chat-transcript-block chat-transcript-block--agent">
-            <AgentTurnView
-              phases={{ reasoning: "", execution: [], result: "" }}
-              isLive
-              toolProgress={toolProgress}
-              toolProgressLog={toolProgressLog}
-              liveSteps={[]}
-              todos={currentTodos}
-              showThinkingPlaceholder
-              isLast
-              streamStall={streamStall}
-              onAbort={onAbort}
-            />
+        }
+        return (
+          <div className="chat-transcript-block chat-transcript-block--agent chat-transcript-activity">
+            <div className="chat-agent-activity-label">{t("chat.thinking")}</div>
+            <div className="chat-typing">
+              <span className="chat-typing-dot" />
+              <span className="chat-typing-dot" />
+              <span className="chat-typing-dot" />
+            </div>
           </div>
-        )}
-      </>
-    );
-  }
+        );
+      }
 
-  return (
-    <>
-      {visibleMessages.map((msg, i) => {
+      if (item.type === "message") {
+        const { msg, isLastMessage } = item as MessageItem;
         const k = (msg as { kind?: string }).kind;
         if (k === "reasoning") {
           return (
@@ -195,29 +229,91 @@ export const MessageList = memo(function MessageList({
             />
           );
         }
-        const bubble = msg as ChatBubbleMessage;
         return (
           <MessageRow
             key={msg.id}
-            msg={bubble}
-            isLast={i === visibleMessages.length - 1}
+            msg={msg as ChatBubbleMessage}
+            isLast={isLastMessage}
             isLoading={isLoading}
+            workspaceRoot={workspaceRoot}
             onApprove={onApprove}
             onDeny={onDeny}
           />
         );
-      })}
+      }
 
-      {isLoading && !hasAgentActivity && (
-        <div className="chat-transcript-block chat-transcript-block--agent chat-transcript-activity">
-          <div className="chat-agent-activity-label">{t("chat.thinking")}</div>
-          <div className="chat-typing">
-            <span className="chat-typing-dot" />
-            <span className="chat-typing-dot" />
-            <span className="chat-typing-dot" />
-          </div>
+      // Turn item (agent mode)
+      const { turnIndex, key } = item as TurnItem;
+      const turn = turns[turnIndex];
+      const isLastTurn = turnIndex === lastTurnIndex;
+      const isLive = isLoading && isLastTurn;
+      const phases = buildAgentTurnPhases(turn.agent);
+      const liveSteps = isLive ? buildAgentRunSteps(turn.agent) : [];
+      const hasReasoningRow = turn.agent.some(
+        (m) => m.kind === "reasoning" && (m.text || "").trim(),
+      );
+      const needsApproval =
+        !isLoading &&
+        isLastTurn &&
+        !!phases.result &&
+        APPROVAL_RE.test(phases.result);
+
+      return (
+        <div key={key} className="chat-paradigm-turn" data-turn-index={turnIndex}>
+          {turn.user && isBubble(turn.user) && turn.user.role === "user" && (
+            <DialogueBlock msg={turn.user} />
+          )}
+          {(turn.agent.length > 0 || isLive) && (
+            <div className="chat-transcript-block chat-transcript-block--agent">
+              <AgentTurnView
+                phases={phases}
+                isLive={isLive}
+                toolProgress={isLive ? toolProgress : null}
+                toolProgressLog={isLive ? toolProgressLog : []}
+                liveSteps={liveSteps}
+                todos={isLive ? currentTodos : []}
+                showThinkingPlaceholder={isLive && !hasReasoningRow}
+                isLast={isLastTurn}
+                workspaceRoot={workspaceRoot}
+                chatMode={chatMode}
+                needsApproval={needsApproval}
+                streamStall={isLive ? streamStall : undefined}
+                onAbort={onAbort}
+                onApprove={onApprove}
+                onDeny={onDeny}
+              />
+            </div>
+          )}
         </div>
-      )}
-    </>
+      );
+    },
+    [
+      agentModeUi,
+      toolProgress,
+      toolProgressLog,
+      currentTodos,
+      workspaceRoot,
+      streamStall,
+      onAbort,
+      onApprove,
+      onDeny,
+      isLoading,
+      turns,
+      lastTurnIndex,
+      lastReasoningId,
+      t,
+    ],
+  );
+
+  return (
+    <Virtuoso
+      ref={virtuosoRef}
+      data={virtuosoItems}
+      itemContent={renderItem}
+      followOutput={followOutput}
+      // Estimate item sizes for smoother scrolling
+      computeItemKey={(_, item) => (item as VirtuosoItem).key}
+      style={{ flex: 1 }}
+    />
   );
 });

@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef, useCallback, memo } from "react";
-import { Plus, Search, X, ChatBubble } from "../../assets/icons";
+import { Plus, Search, X, ChatBubble, Download } from "../../assets/icons";
 import { useI18n } from "../../components/useI18n";
+import { useToast } from "../../components/Toast";
 
 interface CachedSession {
   id: string;
@@ -110,12 +111,19 @@ const SessionCard = memo(function SessionCard({
   isActive,
   showFullDate,
   onClick,
+  onExport,
 }: {
   session: CachedSession;
   isActive: boolean;
   showFullDate: boolean;
   onClick: () => void;
+  onExport: (sessionId: string) => void;
 }) {
+  const handleExport = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onExport(session.id);
+  };
+
   return (
     <button
       className={`sessions-card ${isActive ? "sessions-card--active" : ""}`}
@@ -144,6 +152,14 @@ const SessionCard = memo(function SessionCard({
           </span>
         )}
       </div>
+      <button
+        className="sessions-card-export"
+        title="Export as Markdown"
+        onClick={handleExport}
+        aria-label="Export session"
+      >
+        <Download size={14} />
+      </button>
     </button>
   );
 });
@@ -160,6 +176,7 @@ function Sessions({
   visible,
 }: SessionsProps): React.JSX.Element {
   const { t } = useI18n();
+  const toast = useToast();
   const [sessions, setSessions] = useState<CachedSession[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -167,6 +184,21 @@ function Sessions({
   const [isSearching, setIsSearching] = useState(false);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+
+  const handleExportSession = useCallback(
+    async (sessionId: string) => {
+      const result = await window.hermesAPI.exportSession(
+        sessionId,
+        "markdown",
+      );
+      if (result.success) {
+        toast.addToast("success", t("sessions.exportSuccess"));
+      } else if (!result.canceled) {
+        toast.addToast("error", result.error || t("sessions.exportError"));
+      }
+    },
+    [t, toast],
+  );
 
   // Quiet re-sync from state.db — refreshes the list WITHOUT flipping the
   // loading state, so it can run on a timer or on focus with no spinner flash.
@@ -309,42 +341,54 @@ function Sessions({
         ) : (
           <div className="sessions-list">
             {searchResults.map((r) => (
-              <button
-                key={r.sessionId}
-                className={`sessions-card ${currentSessionId === r.sessionId ? "sessions-card--active" : ""}`}
-                onClick={() => onResumeSession(r.sessionId)}
-              >
-                <div className="sessions-card-main">
-                  <span className="sessions-card-title">
-                    {r.title ||
-                      `${t("sessions.title")} ${r.sessionId.slice(-6)}`}
-                  </span>
-                  <span className="sessions-card-time">
-                    {formatFullDate(r.startedAt)}
-                  </span>
-                </div>
-                {r.snippet && (
-                  <div className="sessions-result-snippet">
-                    {highlightSnippet(r.snippet)}
-                  </div>
-                )}
-                <div className="sessions-card-tags">
-                  <span className="sessions-tag sessions-tag--source">
-                    {r.source}
-                  </span>
-                  <span className="sessions-tag">
-                    {r.messageCount}{" "}
-                    {r.messageCount !== 1
-                      ? t("sessions.messages")
-                      : t("sessions.messageSingular")}
-                  </span>
-                  {r.model && (
-                    <span className="sessions-tag sessions-tag--model">
-                      {formatModel(r.model)}
+              <div key={r.sessionId} className="sessions-card-wrap">
+                <button
+                  className={`sessions-card ${currentSessionId === r.sessionId ? "sessions-card--active" : ""}`}
+                  onClick={() => onResumeSession(r.sessionId)}
+                >
+                  <div className="sessions-card-main">
+                    <span className="sessions-card-title">
+                      {r.title ||
+                        `${t("sessions.title")} ${r.sessionId.slice(-6)}`}
                     </span>
+                    <span className="sessions-card-time">
+                      {formatFullDate(r.startedAt)}
+                    </span>
+                  </div>
+                  {r.snippet && (
+                    <div className="sessions-result-snippet">
+                      {highlightSnippet(r.snippet)}
+                    </div>
                   )}
-                </div>
-              </button>
+                  <div className="sessions-card-tags">
+                    <span className="sessions-tag sessions-tag--source">
+                      {r.source}
+                    </span>
+                    <span className="sessions-tag">
+                      {r.messageCount}{" "}
+                      {r.messageCount !== 1
+                        ? t("sessions.messages")
+                        : t("sessions.messageSingular")}
+                    </span>
+                    {r.model && (
+                      <span className="sessions-tag sessions-tag--model">
+                        {formatModel(r.model)}
+                      </span>
+                    )}
+                  </div>
+                </button>
+                <button
+                  className="sessions-card-export"
+                  title="Export as Markdown"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleExportSession(r.sessionId);
+                  }}
+                  aria-label="Export session"
+                >
+                  <Download size={14} />
+                </button>
+              </div>
             ))}
           </div>
         )
@@ -370,6 +414,7 @@ function Sessions({
                     group.label === "thisWeek" || group.label === "earlier"
                   }
                   onClick={() => onResumeSession(s.id)}
+                  onExport={handleExportSession}
                 />
               ))}
             </div>

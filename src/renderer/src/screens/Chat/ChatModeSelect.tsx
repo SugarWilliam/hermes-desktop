@@ -3,18 +3,20 @@ import {
   MessageSquare,
   Bot,
   ListTodo,
+  Microscope,
   ChevronDown,
   type LucideIcon,
 } from "lucide-react";
 import { useI18n } from "../../components/useI18n";
 import type { ChatMode } from "../../../../shared/chatMode";
 
-const MODES: ChatMode[] = ["chat", "agent", "plan"];
+const MODES: ChatMode[] = ["chat", "agent", "plan", "rigorous"];
 
 const MODE_ICONS: Record<ChatMode, LucideIcon> = {
   chat: MessageSquare,
   agent: Bot,
   plan: ListTodo,
+  rigorous: Microscope,
 };
 
 interface ChatModeSelectProps {
