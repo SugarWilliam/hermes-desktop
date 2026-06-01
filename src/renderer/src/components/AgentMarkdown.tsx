@@ -22,6 +22,10 @@ import {
   isExternalHref,
   scrollToMarkdownAnchor,
 } from "./markdownAnchor";
+import {
+  calloutBodyChildren,
+  detectCallout,
+} from "./markdownCalloutBody";
 
 // Lazy-load the heavy syntax highlighter — only imported when a code block renders
 let _highlighterMod: typeof import("react-syntax-highlighter") | null = null;
@@ -190,6 +194,31 @@ function CodeBlock({
   );
 }
 
+function MarkdownBlockquote({
+  children,
+}: {
+  children?: ReactNode;
+}): React.JSX.Element {
+  const callout = detectCallout(children);
+  if (!callout) {
+    return <blockquote className="md-quote">{children}</blockquote>;
+  }
+  return (
+    <aside
+      className={`md-callout md-callout--${callout.kind}`}
+      role="note"
+      aria-label={callout.title}
+    >
+      <div className="md-callout-head">
+        <span className="md-callout-badge">{callout.title}</span>
+      </div>
+      <blockquote className="md-callout-body">
+        {calloutBodyChildren(children, callout)}
+      </blockquote>
+    </aside>
+  );
+}
+
 function MarkdownHeading({
   level,
   children,
@@ -200,19 +229,44 @@ function MarkdownHeading({
   slugger: (text: string) => string;
 }): React.JSX.Element {
   const id = slugger(cellTextContent(children));
+  const cls = `md-heading md-heading--h${level}`;
   switch (level) {
     case 1:
-      return <h1 id={id}>{children}</h1>;
+      return (
+        <h1 id={id} className={cls}>
+          {children}
+        </h1>
+      );
     case 2:
-      return <h2 id={id}>{children}</h2>;
+      return (
+        <h2 id={id} className={cls}>
+          {children}
+        </h2>
+      );
     case 3:
-      return <h3 id={id}>{children}</h3>;
+      return (
+        <h3 id={id} className={cls}>
+          {children}
+        </h3>
+      );
     case 4:
-      return <h4 id={id}>{children}</h4>;
+      return (
+        <h4 id={id} className={cls}>
+          {children}
+        </h4>
+      );
     case 5:
-      return <h5 id={id}>{children}</h5>;
+      return (
+        <h5 id={id} className={cls}>
+          {children}
+        </h5>
+      );
     default:
-      return <h6 id={id}>{children}</h6>;
+      return (
+        <h6 id={id} className={cls}>
+          {children}
+        </h6>
+      );
   }
 }
 
@@ -311,9 +365,19 @@ const AgentMarkdown = memo(function AgentMarkdown({
               <DownloadChip token={token} />
             );
           },
+          blockquote: ({ children: quoteChildren }) => (
+            <MarkdownBlockquote>{quoteChildren}</MarkdownBlockquote>
+          ),
+          ul: ({ children: ulChildren }) => (
+            <ul className="md-list md-list--unordered">{ulChildren}</ul>
+          ),
+          ol: ({ children: olChildren }) => (
+            <ol className="md-list md-list--ordered">{olChildren}</ol>
+          ),
+          hr: () => <hr className="md-divider" />,
           table: ({ children: tableChildren }) => (
             <div className="md-table-wrap">
-              <table>{tableChildren}</table>
+              <table className="md-table">{tableChildren}</table>
             </div>
           ),
           th: ({ children: thChildren }) => (

@@ -21,6 +21,8 @@ export default {
   thinking: "Thinking",
   agentWorking: "Agent is working…",
   agentTodosTitle: "Task progress",
+  agentTodosBar: "To-do",
+  agentTodosDone: "{{done}}/{{total}} done",
   agentThinkingPlaceholder: "Analyzing your task and attachments…",
   agentStepsTitle: "Steps",
   agentStepsPlaceholder: "Waiting for tool calls…",

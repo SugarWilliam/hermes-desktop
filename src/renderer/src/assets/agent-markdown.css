@@ -1,30 +1,52 @@
 /* ========================================================================
-   Agent Markdown — technical report / Cursor preview style
-   Dark doc: white prose, green links, grey table header bar, flat layout.
+   Agent Markdown — Cursor / VS Code doc preview (dark technical report)
+   Near-black canvas, #d4d4d4 body, white headings, flat borderless tables.
    ======================================================================== */
 
 [data-theme="dark"] {
-  --md-prose-bg: var(--bg-primary);
+  --md-prose-bg: #121212;
   --md-heading: #ffffff;
   --md-heading-strong: #ffffff;
-  --md-body: #e8e8e8;
-  --md-muted: #a3a3a3;
-  --md-inline-bg: rgba(255, 255, 255, 0.08);
+  --md-body: #d4d4d4;
+  --md-muted: #9d9d9d;
+  --md-inline-bg: rgba(255, 255, 255, 0.06);
   --md-inline-fg: #d4d4d4;
-  --md-code-surface: var(--code-bg, #1a1a1a);
-  --md-code-header: transparent;
-  --md-border-subtle: rgba(255, 255, 255, 0.08);
-  --md-table-head-bg: #2d2d2d;
-  --md-table-rule: rgba(255, 255, 255, 0.14);
-  --md-table-row-hover: rgba(255, 255, 255, 0.04);
-  --md-link: #4ade80;
-  --md-link-hover: #86efac;
+  --md-code-surface: #0d0d0d;
+  --md-code-header: #141414;
+  --md-border-subtle: rgba(255, 255, 255, 0.06);
+  --md-table-head-bg: #2a2a2a;
+  --md-table-rule: rgba(255, 255, 255, 0.1);
+  --md-table-row-hover: rgba(255, 255, 255, 0.03);
+  --md-link: #4ec9b0;
+  --md-link-hover: #6ee7c7;
+  --md-heading-accent: rgba(255, 255, 255, 0.22);
+  --md-list-marker: rgba(255, 255, 255, 0.45);
   --md-status-danger: #f07178;
-  --md-status-success: #4ade80;
+  --md-status-success: #4ec9b0;
   --md-status-warn: #fbbf24;
   --md-highlight: #fbbf24;
-  /* Inline / Prism token colors */
-  --md-code-file: #4ade80;
+  --md-prose-max-width: 52rem;
+  --md-prose-max-readable: 56rem;
+  --md-prose-inset-x: clamp(28px, 10vw, 96px);
+  --md-prose-inset-y: 14px;
+  --md-section-gap: 1.25rem;
+  --md-quote-fg: #b8b8b8;
+  --md-quote-border: rgba(78, 201, 176, 0.45);
+  --md-callout-note: #60a5fa;
+  --md-callout-note-bg: rgba(96, 165, 250, 0.1);
+  --md-callout-tip: #4ade80;
+  --md-callout-tip-bg: rgba(74, 222, 128, 0.1);
+  --md-callout-important: #a78bfa;
+  --md-callout-important-bg: rgba(167, 139, 250, 0.12);
+  --md-callout-warning: #fbbf24;
+  --md-callout-warning-bg: rgba(251, 191, 36, 0.12);
+  --md-callout-caution: #f87171;
+  --md-callout-caution-bg: rgba(248, 113, 113, 0.1);
+  --md-callout-info: #38bdf8;
+  --md-callout-info-bg: rgba(56, 189, 248, 0.1);
+  --md-quote-bg: rgba(255, 255, 255, 0.03);
+  /* Inline / Prism token colors (Dark+ / VS Code) */
+  --md-code-file: #4ec9b0;
   --md-code-lines: #98c379;
   --md-code-fn: #c678dd;
   --md-code-macro: #d19a66;
@@ -38,14 +60,14 @@
   --md-code-keyword: #c678dd;
   --md-code-identifier: #e8e8e8;
   --md-code-default: #f0f0f0;
-  --md-token-comment: #6a737d;
-  --md-token-punct: #abb2bf;
-  --md-token-property: #7ec8e3;
-  --md-token-string: #e8e8e8;
-  --md-token-number: #98c379;
-  --md-token-boolean: #d19a66;
-  --md-token-keyword: #c678dd;
-  --md-token-operator: #56b6c2;
+  --md-token-comment: #6a9955;
+  --md-token-punct: #d4d4d4;
+  --md-token-property: #9cdcfe;
+  --md-token-string: #ce9178;
+  --md-token-number: #b5cea8;
+  --md-token-boolean: #569cd6;
+  --md-token-keyword: #569cd6;
+  --md-token-operator: #d4d4d4;
   --md-lang-cpp: #7ec8e3;
   --md-lang-c: #7ec8e3;
   --md-lang-python: #56b6c2;
@@ -65,8 +87,10 @@
   --md-prose-bg: var(--bg-primary);
   --md-heading: #111111;
   --md-heading-strong: #000000;
-  --md-body: #1a1a1a;
-  --md-muted: #666666;
+  --md-body: #242424;
+  --md-muted: #5c5c5c;
+  --md-heading-accent: rgba(0, 0, 0, 0.12);
+  --md-list-marker: rgba(0, 0, 0, 0.35);
   --md-inline-bg: rgba(0, 0, 0, 0.06);
   --md-inline-fg: #24292e;
   --md-code-surface: var(--code-bg, #f5f5f5);
@@ -81,6 +105,26 @@
   --md-status-success: #2e7d32;
   --md-status-warn: #e65100;
   --md-highlight: #ca8a04;
+  --md-prose-max-width: 52rem;
+  --md-prose-max-readable: 56rem;
+  --md-prose-inset-x: clamp(16px, 4vw, 28px);
+  --md-prose-inset-y: 8px;
+  --md-section-gap: 1.25rem;
+  --md-quote-fg: #5a5a5a;
+  --md-quote-border: rgba(22, 163, 74, 0.35);
+  --md-callout-note: #2563eb;
+  --md-callout-note-bg: rgba(37, 99, 235, 0.08);
+  --md-callout-tip: #16a34a;
+  --md-callout-tip-bg: rgba(22, 163, 74, 0.08);
+  --md-callout-important: #7c3aed;
+  --md-callout-important-bg: rgba(124, 58, 237, 0.08);
+  --md-callout-warning: #d97706;
+  --md-callout-warning-bg: rgba(217, 119, 6, 0.1);
+  --md-callout-caution: #dc2626;
+  --md-callout-caution-bg: rgba(220, 38, 38, 0.08);
+  --md-callout-info: #0284c7;
+  --md-callout-info-bg: rgba(2, 132, 199, 0.08);
+  --md-quote-bg: rgba(0, 0, 0, 0.03);
   --md-code-file: #15803d;
   --md-code-lines: #2e7d32;
   --md-code-fn: #6f42c1;
@@ -124,41 +168,39 @@
   word-wrap: break-word;
   overflow-wrap: break-word;
   color: var(--md-body, var(--text-primary));
-  font-family: var(
-    --font-agent,
-    "Courier New",
-    Consolas,
-    "Microsoft YaHei",
-    "微软雅黑",
-    SimHei,
-    "黑体",
-    monospace
-  );
-  font-size: var(--agent-font-size, 14px);
-  line-height: 1.7;
-  letter-spacing: 0.01em;
+  font-family: var(--font-sans);
+  font-size: var(--md-font-size, 15px);
+  line-height: 1.68;
+  letter-spacing: 0;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
 
 .agent-markdown--chat {
-  font-size: 14px;
-  line-height: 1.7;
+  --md-font-size: calc(var(--agent-font-size, 14px) + 1px);
+  line-height: 1.68;
+  width: 100%;
+  max-width: var(--md-prose-max-readable, 56rem);
+  margin: 0 auto;
+  box-sizing: border-box;
+  padding: var(--md-prose-inset-y) var(--md-prose-inset-x)
+    calc(var(--md-prose-inset-y) + 6px);
+  background: var(--md-prose-bg, var(--bg-primary));
 }
 
 .agent-markdown--document {
-  font-size: 14px;
-  line-height: 1.72;
+  --md-font-size: calc(var(--agent-font-size, 14px) + 1px);
+  line-height: 1.68;
   width: 100%;
-  max-width: none;
+  max-width: 100%;
   margin: 0;
   box-sizing: border-box;
-  padding: 20px 24px 40px;
+  padding: 16px 20px 36px;
   background: var(--md-prose-bg, var(--bg-primary));
 }
 
 .agent-markdown p {
-  margin: 0 0 0.85em;
+  margin: 0 0 1em;
   color: var(--md-body);
 }
 
@@ -166,89 +208,169 @@
   margin-bottom: 0;
 }
 
-/* ----- Headings (report sections) ----- */
-.agent-markdown h1,
-.agent-markdown h2,
-.agent-markdown h3,
-.agent-markdown h4,
-.agent-markdown h5,
-.agent-markdown h6 {
-  margin: 1.75em 0 0.65em;
+/* ----- Headings (report sections — white hierarchy, no color bars) ----- */
+.agent-markdown .md-heading {
+  margin: 2em 0 0.75em;
   padding: 0;
   font-weight: 700;
-  line-height: 1.3;
+  line-height: 1.4;
   color: var(--md-heading);
   letter-spacing: 0;
   scroll-margin-top: 12px;
 }
 
-.agent-markdown h1:first-child,
-.agent-markdown h2:first-child,
-.agent-markdown h3:first-child {
+.agent-markdown .md-heading:first-child,
+.agent-markdown .md-heading--h1:first-child,
+.agent-markdown .md-heading--h2:first-child,
+.agent-markdown .md-heading--h3:first-child {
   margin-top: 0;
 }
 
-.agent-markdown h1 {
-  font-size: 1.5rem;
-  margin-bottom: 0.75em;
-  padding-bottom: 0.4em;
+.agent-markdown .md-heading--h1 {
+  font-size: 1.75rem;
+  margin-bottom: 1em;
+  padding-bottom: 0.55em;
   border-bottom: 1px solid var(--md-table-rule);
 }
 
-.agent-markdown h2 {
-  font-size: 1.25rem;
-  margin-top: 2rem;
-  padding-bottom: 0.3em;
+.agent-markdown .md-heading--h2 {
+  font-size: 1.375rem;
+  margin-top: 2.5rem;
+  margin-bottom: 0.85em;
+  padding-bottom: 0.4em;
   border-bottom: 1px solid var(--md-border-subtle);
 }
 
-.agent-markdown h3 {
-  font-size: 1.05rem;
-  margin-top: 1.35em;
-  font-weight: 650;
+.agent-markdown .md-heading--h3 {
+  font-size: 1.125rem;
+  margin-top: 1.85rem;
+  margin-bottom: 0.7em;
+  padding-bottom: 0.25em;
+  border-bottom: 1px solid var(--md-border-subtle);
+  font-weight: 700;
+  color: var(--md-heading);
 }
 
-.agent-markdown h4,
-.agent-markdown h5,
-.agent-markdown h6 {
-  font-size: 0.98rem;
-  font-weight: 650;
+.agent-markdown .md-heading--h4 {
+  font-size: 1.02rem;
+  font-weight: 700;
+  color: var(--md-heading);
+  margin-top: 1.5rem;
+  margin-bottom: 0.55em;
+  padding-bottom: 0.2em;
+  border-bottom: 1px solid var(--md-border-subtle);
+}
+
+.agent-markdown .md-heading--h5,
+.agent-markdown .md-heading--h6 {
+  font-size: var(--md-font-size, 15px);
+  font-weight: 700;
+  color: var(--md-heading);
+  margin-top: 1.25rem;
+  margin-bottom: 0.45em;
+}
+
+/* ----- Lists ----- */
+.agent-markdown .md-list {
+  margin: 0.5em 0 1.1em;
+  padding-left: 0;
   color: var(--md-body);
 }
 
-/* ----- Lists (发现 / bullet blocks) ----- */
-.agent-markdown ul,
-.agent-markdown ol {
-  margin: 0.65em 0 1em;
+.agent-markdown .md-list--unordered {
+  list-style: none;
+}
+
+.agent-markdown .md-list--unordered > li {
+  position: relative;
   padding-left: 1.5em;
-  list-style: revert;
-  color: var(--md-body);
+}
+
+.agent-markdown .md-list--unordered > li::before {
+  content: "";
+  position: absolute;
+  left: 0.35em;
+  top: 0.62em;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--md-list-marker);
+}
+
+.agent-markdown .md-list--ordered {
+  list-style: none;
+  counter-reset: md-ol;
+}
+
+.agent-markdown .md-list--ordered > li {
+  position: relative;
+  padding-left: 2.15em;
+  counter-increment: md-ol;
+}
+
+.agent-markdown .md-list--ordered > li::before {
+  content: counter(md-ol) ".";
+  position: absolute;
+  left: 0;
+  top: 0.05em;
+  min-width: 1.5em;
+  font-size: 0.92em;
+  font-weight: 600;
+  color: var(--md-muted);
+  font-variant-numeric: tabular-nums;
 }
 
 .agent-markdown li {
-  margin: 0.35em 0;
-  line-height: 1.65;
+  margin: 0.4em 0;
+  line-height: 1.68;
 }
 
 .agent-markdown li > p {
-  margin: 0.2em 0;
+  margin: 0.25em 0;
 }
 
-.agent-markdown li > ul,
-.agent-markdown li > ol {
-  margin: 0.3em 0 0.3em 1em;
+.agent-markdown li > .md-list {
+  margin: 0.4em 0 0.5em;
+}
+
+/* Nested lists — clearer indent & alignment */
+.agent-markdown .md-list .md-list {
+  margin-left: 0.35em;
+}
+
+.agent-markdown .md-list--unordered .md-list--unordered > li {
+  padding-left: 1.65em;
+}
+
+.agent-markdown .md-list--ordered .md-list--ordered > li,
+.agent-markdown .md-list--unordered .md-list--ordered > li,
+.agent-markdown .md-list--ordered .md-list--unordered > li {
+  padding-left: 2.35em;
+}
+
+.agent-markdown li > .md-list--unordered > li::before {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  opacity: 0.55;
+}
+
+.agent-markdown .md-list--unordered .md-list--unordered > li::before {
+  left: 0.5em;
+  width: 3px;
+  height: 3px;
 }
 
 /* ----- Inline code & paths ----- */
 .agent-markdown .md-inline-code,
 .agent-markdown code:not(pre code) {
   font-family: var(--font-mono);
-  font-size: 0.88em;
-  padding: 0.1em 0.38em;
+  font-size: 0.9em;
+  padding: 0.12em 0.4em;
   border-radius: 4px;
   background: var(--md-inline-bg);
-  color: var(--md-inline-fg);
-  border: none;
+  color: var(--md-code-file);
+  border: 1px solid var(--md-border-subtle);
   white-space: pre-wrap;
   word-break: break-word;
 }
@@ -324,23 +446,29 @@
 
 /* ----- Fenced code blocks ----- */
 .agent-markdown .chat-code-block {
-  margin: 1em 0 !important;
+  margin: 1.15em 0 !important;
   border: none;
-  border-radius: 6px;
+  border-radius: 4px;
   overflow: hidden;
   background: var(--md-code-surface);
 }
 
 .agent-markdown .chat-code-header {
-  background: var(--md-code-surface);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--md-code-header);
   border-bottom: 1px solid var(--md-border-subtle);
-  padding: 4px 12px;
+  padding: 5px 12px;
+  min-height: 28px;
 }
 
 .agent-markdown .chat-code-lang {
-  color: var(--md-lang-default);
-  font-weight: 600;
+  color: var(--md-muted);
+  font-size: 12px;
+  font-weight: 500;
   text-transform: lowercase;
+  letter-spacing: 0.02em;
 }
 
 .agent-markdown .chat-code-lang.md-code-lang--cpp,
@@ -538,52 +666,56 @@
   color: var(--md-status-warn);
 }
 
-/* ----- Tables (grey header bar, row dividers) ----- */
+/* ----- Tables (borderless, horizontal rules only) ----- */
 .agent-markdown .md-table-wrap {
   width: 100%;
   overflow-x: auto;
-  margin: 1em 0 1.25em;
+  margin: 1em 0 1.5em;
   -webkit-overflow-scrolling: touch;
+  border: none;
+  border-radius: 0;
+  background: transparent;
 }
 
-.agent-markdown table {
+.agent-markdown .md-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 13px;
+  font-size: var(--md-font-size, 15px);
   display: table;
 }
 
-.agent-markdown thead {
+.agent-markdown .md-table thead {
   background: var(--md-table-head-bg);
 }
 
-.agent-markdown th {
-  font-weight: 600;
+.agent-markdown .md-table th {
+  font-weight: 700;
   color: var(--md-heading);
   background: var(--md-table-head-bg);
   border: none;
   border-bottom: 1px solid var(--md-table-rule);
-  padding: 0.6em 0.85em;
+  padding: 0.55em 0.75em;
   text-align: left;
   vertical-align: middle;
   white-space: nowrap;
+  font-size: inherit;
 }
 
-.agent-markdown td {
+.agent-markdown .md-table td {
   border: none;
   border-bottom: 1px solid var(--md-border-subtle);
-  padding: 0.55em 0.85em;
+  padding: 0.5em 0.75em;
   text-align: left;
   vertical-align: top;
   color: var(--md-body);
-  line-height: 1.55;
+  line-height: 1.6;
 }
 
-.agent-markdown tbody tr:hover td {
+.agent-markdown .md-table tbody tr:hover td {
   background: var(--md-table-row-hover);
 }
 
-.agent-markdown tbody tr:last-child td {
+.agent-markdown .md-table tbody tr:last-child td {
   border-bottom: none;
 }
 
@@ -616,24 +748,133 @@
   text-decoration: underline;
 }
 
-/* ----- Blockquote, hr, emphasis ----- */
-.agent-markdown blockquote {
-  margin: 1em 0;
-  padding: 0.65em 1em;
-  border-left: 3px solid var(--md-border-subtle);
-  background: rgba(255, 255, 255, 0.03);
-  color: var(--md-muted);
-  border-radius: 0 4px 4px 0;
+/* ----- Blockquote & callouts ----- */
+.agent-markdown .md-quote {
+  margin: 1.15em 0;
+  padding: 0.8em 1em 0.8em 1.15em;
+  border-left: 3px solid var(--md-quote-border);
+  background: var(--md-quote-bg);
+  color: var(--md-quote-fg);
+  font-family: var(--font-sans);
+  font-size: 0.96em;
+  font-style: italic;
+  line-height: 1.62;
+  border-radius: 0 var(--radius-sm, 6px) var(--radius-sm, 6px) 0;
 }
 
-.agent-markdown hr {
+.agent-markdown .md-quote p {
+  margin-bottom: 0.5em;
+}
+
+.agent-markdown .md-callout {
+  margin: 1.15em 0;
+  border-radius: var(--radius-md, 10px);
+  border: 1px solid var(--md-border-subtle);
+  overflow: hidden;
+}
+
+.agent-markdown .md-callout-head {
+  padding: 0.45em 0.85em;
+  border-bottom: 1px solid var(--md-border-subtle);
+}
+
+.agent-markdown .md-callout-badge {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.agent-markdown .md-callout-body {
+  margin: 0;
+  padding: 0.75em 1em;
   border: none;
+  background: transparent;
+  color: var(--md-body);
+}
+
+.agent-markdown .md-callout-body p:last-child {
+  margin-bottom: 0;
+}
+
+.agent-markdown .md-callout--note {
+  border-color: color-mix(in srgb, var(--md-callout-note) 35%, transparent);
+  background: var(--md-callout-note-bg);
+}
+.agent-markdown .md-callout--note .md-callout-head {
+  background: color-mix(in srgb, var(--md-callout-note) 12%, transparent);
+}
+.agent-markdown .md-callout--note .md-callout-badge {
+  color: var(--md-callout-note);
+}
+
+.agent-markdown .md-callout--tip {
+  border-color: color-mix(in srgb, var(--md-callout-tip) 35%, transparent);
+  background: var(--md-callout-tip-bg);
+}
+.agent-markdown .md-callout--tip .md-callout-head {
+  background: color-mix(in srgb, var(--md-callout-tip) 12%, transparent);
+}
+.agent-markdown .md-callout--tip .md-callout-badge {
+  color: var(--md-callout-tip);
+}
+
+.agent-markdown .md-callout--important {
+  border-color: color-mix(in srgb, var(--md-callout-important) 35%, transparent);
+  background: var(--md-callout-important-bg);
+}
+.agent-markdown .md-callout--important .md-callout-head {
+  background: color-mix(in srgb, var(--md-callout-important) 12%, transparent);
+}
+.agent-markdown .md-callout--important .md-callout-badge {
+  color: var(--md-callout-important);
+}
+
+.agent-markdown .md-callout--warning,
+.agent-markdown .md-callout--caution {
+  border-color: color-mix(in srgb, var(--md-callout-warning) 40%, transparent);
+  background: var(--md-callout-warning-bg);
+}
+.agent-markdown .md-callout--warning .md-callout-head,
+.agent-markdown .md-callout--caution .md-callout-head {
+  background: color-mix(in srgb, var(--md-callout-warning) 14%, transparent);
+}
+.agent-markdown .md-callout--warning .md-callout-badge,
+.agent-markdown .md-callout--caution .md-callout-badge {
+  color: var(--md-callout-warning);
+}
+
+.agent-markdown .md-callout--caution {
+  border-color: color-mix(in srgb, var(--md-callout-caution) 40%, transparent);
+  background: var(--md-callout-caution-bg);
+}
+.agent-markdown .md-callout--caution .md-callout-head {
+  background: color-mix(in srgb, var(--md-callout-caution) 14%, transparent);
+}
+.agent-markdown .md-callout--caution .md-callout-badge {
+  color: var(--md-callout-caution);
+}
+
+.agent-markdown .md-callout--info {
+  border-color: color-mix(in srgb, var(--md-callout-info) 35%, transparent);
+  background: var(--md-callout-info-bg);
+}
+.agent-markdown .md-callout--info .md-callout-head {
+  background: color-mix(in srgb, var(--md-callout-info) 12%, transparent);
+}
+.agent-markdown .md-callout--info .md-callout-badge {
+  color: var(--md-callout-info);
+}
+
+.agent-markdown .md-divider {
+  border: none;
+  height: 0;
+  margin: 2.25em 0;
   border-top: 1px solid var(--md-border-subtle);
-  margin: 1.75em 0;
 }
 
 .agent-markdown strong {
-  font-weight: 650;
+  font-weight: 700;
   color: var(--md-heading-strong);
 }
 
@@ -673,9 +914,26 @@
   background: transparent;
 }
 
-.chat-transcript-block--agent .agent-markdown {
-  padding: 0;
-  max-width: none;
+.chat-transcript-block--agent .agent-markdown--chat {
   width: 100%;
-  background: transparent;
+  max-width: min(100%, var(--md-prose-max-readable, 56rem));
+}
+
+.paradigm-phase-body--result .agent-markdown--chat {
+  width: 100%;
+  max-width: min(100%, var(--md-prose-max-readable, 56rem));
+}
+
+.thinking-prose .agent-markdown--chat {
+  padding-left: var(--md-prose-inset-x);
+  padding-right: var(--md-prose-inset-x);
+}
+
+/* Fenced blocks use mono; inline inherits report font */
+.agent-markdown .chat-code-block,
+.agent-markdown .chat-code-block code,
+.agent-markdown .chat-diff-content,
+.agent-markdown .md-code-fallback {
+  font-family: var(--font-mono);
+  font-size: 13px;
 }

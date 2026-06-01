@@ -21,6 +21,8 @@ export default {
   thinking: "思考中",
   agentWorking: "Agent 正在执行…",
   agentTodosTitle: "任务进度",
+  agentTodosBar: "待办",
+  agentTodosDone: "{{done}}/{{total}} 已完成",
   agentThinkingPlaceholder: "正在分析任务与附件内容…",
   agentStepsTitle: "执行步骤",
   agentStepsPlaceholder: "等待工具调用…",

@@ -1,5 +1,5 @@
-import { useCallback, useRef } from "react";
-import Editor, { type OnMount } from "@monaco-editor/react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import Editor, { type OnMount, loader } from "@monaco-editor/react";
 import type { editor } from "monaco-editor";
 
 /** Map file extensions to Monaco language identifiers. */
@@ -69,7 +69,22 @@ export function CodeEditor({
   onSave,
 }: CodeEditorProps): React.JSX.Element {
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const language = languageFromPath(filePath);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoadError(null);
+    void loader.init().catch((err: unknown) => {
+      if (cancelled) return;
+      const message =
+        err instanceof Error ? err.message : "Monaco editor failed to load";
+      setLoadError(message);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleMount: OnMount = useCallback((editor, monaco) => {
     editorRef.current = editor;
@@ -92,6 +107,14 @@ export function CodeEditor({
     },
     [onChange],
   );
+
+  if (loadError) {
+    return (
+      <div className="chat-workspace-error" role="alert">
+        {loadError}
+      </div>
+    );
+  }
 
   return (
     <Editor

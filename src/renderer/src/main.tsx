@@ -1,3 +1,4 @@
+import "./monaco/setup";
 import "./assets/main.css";
 import "./assets/agent-markdown.css";
 import "./assets/agent-thinking.css";

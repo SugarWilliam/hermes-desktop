@@ -1,4 +1,4 @@
-import { memo } from "react";
+import { memo, useState } from "react";
 import { CheckCircle2, Circle, CircleDashed, XCircle } from "lucide-react";
 import { useI18n } from "../../components/useI18n";
 import type { AgentTodoItem, AgentTodoStatus } from "./agentTodos";
@@ -26,29 +26,61 @@ export const AgentTodoPanel = memo(function AgentTodoPanel({
   embedded?: boolean;
 }): React.JSX.Element | null {
   const { t } = useI18n();
+  const [expanded, setExpanded] = useState(false);
   if (items.length === 0) return null;
 
+  const completed = items.filter((i) => i.status === "completed").length;
+  const panelClass = [
+    "agent-todo-panel",
+    embedded ? "agent-todo-panel--embedded" : "",
+    embedded && expanded ? "agent-todo-panel--expanded" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  const list = (
+    <ul className="agent-todo-list">
+      {items.map((item) => (
+        <li
+          key={item.id}
+          className={`agent-todo-item agent-todo-item--${item.status}`}
+          role="listitem"
+        >
+          <StatusIcon status={item.status} />
+          <span className="agent-todo-text">{item.content}</span>
+        </li>
+      ))}
+    </ul>
+  );
+
   return (
-    <div
-      className={`agent-todo-panel ${embedded ? "agent-todo-panel--embedded" : ""}`}
-      role="list"
-      aria-label={t("chat.agentTodosTitle")}
-    >
+    <div className={panelClass} role="list" aria-label={t("chat.agentTodosTitle")}>
       {!embedded && (
         <div className="agent-todo-panel-header">{t("chat.agentTodosTitle")}</div>
       )}
-      <ul className="agent-todo-list">
-        {items.map((item) => (
-          <li
-            key={item.id}
-            className={`agent-todo-item agent-todo-item--${item.status}`}
-            role="listitem"
+      {embedded ? (
+        <>
+          {expanded ? list : null}
+          <button
+            type="button"
+            className="agent-todo-panel-footer"
+            onClick={() => setExpanded((v) => !v)}
+            aria-expanded={expanded}
           >
-            <StatusIcon status={item.status} />
-            <span className="agent-todo-text">{item.content}</span>
-          </li>
-        ))}
-      </ul>
+            <span className="agent-todo-panel-footer-label">
+              {expanded ? "∨" : ">"} {t("chat.agentTodosBar")}
+            </span>
+            <span className="agent-todo-panel-footer-meta">
+              {t("chat.agentTodosDone", {
+                done: completed,
+                total: items.length,
+              })}
+            </span>
+          </button>
+        </>
+      ) : (
+        list
+      )}
     </div>
   );
 });
