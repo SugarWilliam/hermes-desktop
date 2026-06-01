@@ -183,3 +183,127 @@ export async function getWorkspaceGitStatus(
     return {};
   }
 }
+
+// ── Git Operations ─────────────────────────────────────
+
+const GIT_TIMEOUT = 15000;
+
+export async function gitCommit(
+  root: string,
+  message: string,
+  files?: string[],
+): Promise<{ success: boolean; error?: string }> {
+  const absRoot = resolve(root);
+  try {
+    if (files && files.length > 0) {
+      const relFiles = files.map((f) => {
+        const abs = assertUnderRoot(absRoot, f);
+        return abs.slice(absRoot.length + 1);
+      });
+      await execFileAsync("git", ["-C", absRoot, "add", "--", ...relFiles], {
+        timeout: GIT_TIMEOUT,
+      });
+    } else {
+      await execFileAsync("git", ["-C", absRoot, "add", "-A"], {
+        timeout: GIT_TIMEOUT,
+      });
+    }
+    await execFileAsync("git", ["-C", absRoot, "commit", "-m", message], {
+      timeout: GIT_TIMEOUT,
+    });
+    return { success: true };
+  } catch (e: unknown) {
+    return { success: false, error: (e as Error).message };
+  }
+}
+
+export async function gitPush(
+  root: string,
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    await execFileAsync("git", ["-C", resolve(root), "push"], {
+      timeout: 30000,
+    });
+    return { success: true };
+  } catch (e: unknown) {
+    return { success: false, error: (e as Error).message };
+  }
+}
+
+export async function gitPull(
+  root: string,
+): Promise<{ success: boolean; error?: string; output?: string }> {
+  try {
+    const { stdout } = await execFileAsync(
+      "git",
+      ["-C", resolve(root), "pull"],
+      { timeout: 30000 },
+    );
+    return { success: true, output: stdout.trim() };
+  } catch (e: unknown) {
+    return { success: false, error: (e as Error).message };
+  }
+}
+
+export async function gitBranches(
+  root: string,
+): Promise<{ current: string; branches: string[] }> {
+  const absRoot = resolve(root);
+  try {
+    const { stdout: currentOut } = await execFileAsync(
+      "git",
+      ["-C", absRoot, "rev-parse", "--abbrev-ref", "HEAD"],
+      { timeout: GIT_TIMEOUT },
+    );
+    const current = currentOut.trim();
+    const { stdout } = await execFileAsync(
+      "git",
+      ["-C", absRoot, "branch", "--list", "--format=%(refname:short)"],
+      { timeout: GIT_TIMEOUT },
+    );
+    const branches = stdout
+      .split("\n")
+      .map((b) => b.trim())
+      .filter(Boolean);
+    return { current, branches };
+  } catch {
+    return { current: "unknown", branches: [] };
+  }
+}
+
+export async function gitSwitchBranch(
+  root: string,
+  branch: string,
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    await execFileAsync(
+      "git",
+      ["-C", resolve(root), "checkout", branch],
+      { timeout: GIT_TIMEOUT },
+    );
+    return { success: true };
+  } catch (e: unknown) {
+    return { success: false, error: (e as Error).message };
+  }
+}
+
+export async function gitDiff(
+  root: string,
+  file?: string,
+): Promise<string> {
+  const absRoot = resolve(root);
+  const args = ["-C", absRoot, "diff"];
+  if (file) {
+    assertUnderRoot(absRoot, resolve(absRoot, file));
+    args.push("--", file);
+  }
+  try {
+    const { stdout } = await execFileAsync("git", args, {
+      timeout: GIT_TIMEOUT,
+      maxBuffer: 4 * 1024 * 1024,
+    });
+    return stdout;
+  } catch {
+    return "";
+  }
+}

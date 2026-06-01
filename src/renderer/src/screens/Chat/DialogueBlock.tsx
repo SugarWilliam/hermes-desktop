@@ -13,10 +13,12 @@ function fileNameFromPath(p: string): string {
 
 interface DialogueBlockProps {
   msg: ChatBubbleMessage;
+  onFork?: (messageId: string) => void;
 }
 
 export const DialogueBlock = memo(function DialogueBlock({
   msg,
+  onFork,
 }: DialogueBlockProps): React.JSX.Element {
   const { t } = useI18n();
   const displayText = useMemo(
@@ -72,6 +74,15 @@ export const DialogueBlock = memo(function DialogueBlock({
             <AttachmentChip key={att.id} attachment={att} />
           ))}
         </div>
+      )}
+      {msg.role === "user" && onFork && msg.id?.startsWith("db-") && (
+        <button
+          className="chat-fork-btn paradigm-fork-btn"
+          title={t("chat.forkFromHere")}
+          onClick={() => onFork(msg.id)}
+        >
+          ⑂ {t("chat.fork")}
+        </button>
       )}
     </section>
   );

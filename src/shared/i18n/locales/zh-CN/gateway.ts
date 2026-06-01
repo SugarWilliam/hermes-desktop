@@ -6,4 +6,13 @@ export default {
   running: "运行中",
   stopped: "已停止",
   gatewayHint: "将 Hermes 连接到 Telegram、Discord、Slack 等平台",
+  metricsTitle: "网关指标",
+  metricsUnavailable: "指标端点不可用。网关可能未开放 /api/stats。",
+  totalRequests: "总请求数",
+  totalErrors: "总错误数",
+  errorRate: "错误率",
+  avgLatency: "平均延迟",
+  uptime: "运行时长",
+  platformStats: "平台统计",
+  recentRequests: "最近请求",
 } as const;

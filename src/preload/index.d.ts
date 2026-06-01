@@ -257,6 +257,23 @@ interface HermesAPI {
   workspaceGitStatus: (
     root: string,
   ) => Promise<Record<string, "modified" | "added" | "deleted" | "untracked">>;
+  gitCommit: (
+    root: string,
+    message: string,
+    files?: string[],
+  ) => Promise<{ success: boolean; error?: string }>;
+  gitPush: (root: string) => Promise<{ success: boolean; error?: string }>;
+  gitPull: (
+    root: string,
+  ) => Promise<{ success: boolean; error?: string; output?: string }>;
+  gitBranches: (
+    root: string,
+  ) => Promise<{ current: string; branches: string[] }>;
+  gitSwitchBranch: (
+    root: string,
+    branch: string,
+  ) => Promise<{ success: boolean; error?: string }>;
+  gitDiff: (root: string, file?: string) => Promise<string>;
   workspaceReadFile: (
     root: string,
     filePath: string,
@@ -336,12 +353,30 @@ interface HermesAPI {
   startGateway: () => Promise<boolean>;
   stopGateway: () => Promise<boolean>;
   gatewayStatus: () => Promise<boolean>;
+  getGatewayMetrics: (profile?: string) => Promise<{
+    totalRequests: number;
+    totalErrors: number;
+    avgLatencyMs: number;
+    uptime: number;
+    platformStats: Record<string, { requests: number; errors: number }>;
+    recentRequests: Array<{ timestamp: number; path: string; status: number; latencyMs: number }>;
+  } | null>;
 
   // Platform toggles
   getPlatformEnabled: (profile?: string) => Promise<Record<string, boolean>>;
   setPlatformEnabled: (
     platform: string,
     enabled: boolean,
+    profile?: string,
+  ) => Promise<boolean>;
+  getPlatformConfig: (
+    platform: string,
+    profile?: string,
+  ) => Promise<Record<string, string>>;
+  setPlatformConfigValue: (
+    platform: string,
+    key: string,
+    value: string,
     profile?: string,
   ) => Promise<boolean>;
 
@@ -404,6 +439,20 @@ interface HermesAPI {
         }
     >
   >;
+  generateLlmSummary: (
+    messages: Array<{ role: string; content: string }>,
+    profile?: string,
+  ) => Promise<{ success: boolean; summary?: string; error?: string }>;
+
+  // Bookmarks
+  addBookmark: (
+    sessionId: string, messageId: number, note?: string,
+  ) => Promise<{ id: number; sessionId: string; messageId: number; note: string; createdAt: number } | null>;
+  removeBookmark: (id: number) => Promise<boolean>;
+  listBookmarks: () => Promise<Array<{
+    id: number; sessionId: string; messageId: number; note: string; createdAt: number; sessionTitle?: string | null;
+  }>>;
+  updateBookmarkNote: (id: number, note: string) => Promise<boolean>;
 
   // Profiles
   listProfiles: () => Promise<
@@ -553,6 +602,71 @@ interface HermesAPI {
     key: string,
     profile?: string,
   ) => Promise<{ success: boolean; error?: string }>;
+  mragIndexKB: (
+    key: string,
+    docDir: string,
+    profile?: string,
+  ) => Promise<{
+    success: boolean;
+    parentCount: number;
+    subCount: number;
+    skipped: number;
+    errors: string[];
+  }>;
+  mragIncrementalIndexKB: (
+    key: string,
+    docDir: string,
+    profile?: string,
+  ) => Promise<{
+    success: boolean;
+    added: number;
+    removed: number;
+    skipped: number;
+    errors: string[];
+  }>;
+  mragAddDoc: (
+    key: string,
+    filePath: string,
+    profile?: string,
+  ) => Promise<{ success: boolean; parentCount: number; error?: string }>;
+  mragRemoveDoc: (
+    key: string,
+    docPath: string,
+    profile?: string,
+  ) => Promise<void>;
+  mragSearchKB: (
+    key: string,
+    query: string,
+    topK?: number,
+    profile?: string,
+  ) => Promise<
+    Array<{
+      score: number;
+      parentContent: string;
+      subSnippet: string;
+      docPath: string;
+      sectionTitle: string;
+      parentId: number;
+    }>
+  >;
+  mragSearchAllKBs: (
+    query: string,
+    topK?: number,
+    profile?: string,
+  ) => Promise<
+    Record<
+      string,
+      Array<{
+        score: number;
+        parentContent: string;
+        subSnippet: string;
+        docPath: string;
+        sectionTitle: string;
+        parentId: number;
+      }>
+    >
+  >;
+  mragGetChunkCount: (key: string, profile?: string) => Promise<number>;
 
   // Soul
   readSoul: (profile?: string) => Promise<string>;
@@ -578,6 +692,17 @@ interface HermesAPI {
     Array<{ name: string; category: string; description: string; path: string }>
   >;
   listBundledSkills: () => Promise<
+    Array<{
+      name: string;
+      description: string;
+      category: string;
+      source: string;
+      installed: boolean;
+    }>
+  >;
+  searchSkills: (
+    query: string,
+  ) => Promise<
     Array<{
       name: string;
       description: string;
@@ -624,6 +749,10 @@ interface HermesAPI {
   >;
   updateSessionTitle: (sessionId: string, title: string) => Promise<void>;
   deleteSession: (sessionId: string) => Promise<void>;
+  forkSession: (
+    sessionId: string,
+    fromMessageId: number,
+  ) => Promise<{ success: boolean; newSessionId?: string; error?: string }>;
   exportSession: (
     sessionId: string,
     format: "markdown" | "json",
@@ -648,6 +777,27 @@ interface HermesAPI {
       model: string;
       snippet: string;
     }>
+  >;
+
+  // Usage tracking
+  getUsageStats: (
+    fromTs?: number,
+    toTs?: number,
+    profile?: string,
+  ) => Promise<{
+    totalPromptTokens: number;
+    totalCompletionTokens: number;
+    totalTokens: number;
+    totalCost: number;
+    totalTurns: number;
+    byModel: Record<string, { tokens: number; cost: number; turns: number }>;
+    byProvider: Record<string, { tokens: number; cost: number; turns: number }>;
+  }>;
+  getUsageTrend: (
+    days?: number,
+    profile?: string,
+  ) => Promise<
+    Array<{ date: string; tokens: number; cost: number; turns: number }>
   >;
 
   // Credential Pool (profile-aware) — entries follow the upstream
@@ -840,6 +990,7 @@ interface HermesAPI {
     profile?: string,
   ) => Promise<{ success: boolean; data?: { id: string }; error?: string }>;
   selectFolder: () => Promise<string | null>;
+  selectFile: () => Promise<string | null>;
   kanbanAssignTask: (
     taskId: string,
     assignee: string | null,
@@ -919,12 +1070,44 @@ interface HermesAPI {
   ) => Promise<
     Array<{ name: string; type: string; enabled: boolean; detail: string }>
   >;
+  addMcpServer: (
+    input: {
+      name: string;
+      type: "stdio" | "http";
+      command?: string;
+      args?: string[];
+      url?: string;
+      env?: Record<string, string>;
+      enabled?: boolean;
+    },
+    profile?: string,
+  ) => Promise<{ success: boolean; error?: string }>;
+  removeMcpServer: (
+    name: string,
+    profile?: string,
+  ) => Promise<{ success: boolean; error?: string }>;
+  updateMcpServer: (
+    name: string,
+    input: {
+      name: string;
+      type: "stdio" | "http";
+      command?: string;
+      args?: string[];
+      url?: string;
+      env?: Record<string, string>;
+      enabled?: boolean;
+    },
+    profile?: string,
+  ) => Promise<{ success: boolean; error?: string }>;
 
   // Log viewer
   readLogs: (
     logFile?: string,
     lines?: number,
   ) => Promise<{ content: string; path: string }>;
+  watchLogs: (logFile?: string) => Promise<boolean>;
+  stopWatchLogs: () => Promise<boolean>;
+  onLogChunk: (callback: (chunk: string) => void) => () => void;
 
   // Specs management
   listSpecs(profile?: string): Promise<Array<{title: string; status: string; created: string; sessionId: string; body: string}>>;
@@ -933,6 +1116,36 @@ interface HermesAPI {
   updateSpec(name: string, updates: {body?: string; status?: string; title?: string}, profile?: string): Promise<{success: boolean; error?: string}>;
   deleteSpec(name: string, profile?: string): Promise<{success: boolean; error?: string}>;
   parsePlan(text: string): any;
+
+  // Prompt templates
+  listPromptTemplates(profile?: string): Promise<
+    Array<{ id: string; name: string; category: string; content: string; createdAt: number; updatedAt: number }>
+  >;
+  createPromptTemplate(
+    input: { name: string; category: string; content: string },
+    profile?: string,
+  ): Promise<{ id: string; name: string; category: string; content: string; createdAt: number; updatedAt: number }>;
+  updatePromptTemplate(
+    id: string,
+    updates: { name?: string; category?: string; content?: string },
+    profile?: string,
+  ): Promise<{ success: boolean; error?: string }>;
+  deletePromptTemplate(
+    id: string,
+    profile?: string,
+  ): Promise<{ success: boolean; error?: string }>;
+
+  // Keybindings
+  getKeybindings(profile?: string): Promise<Array<{ id: string; label: string; defaultKey: string; key: string }>>;
+  setKeybinding(
+    id: string,
+    key: string,
+    profile?: string,
+  ): Promise<Array<{ id: string; label: string; defaultKey: string; key: string }>>;
+  resetKeybinding(
+    id: string,
+    profile?: string,
+  ): Promise<Array<{ id: string; label: string; defaultKey: string; key: string }>>;
 }
 
 declare global {

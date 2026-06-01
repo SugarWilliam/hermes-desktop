@@ -7,7 +7,7 @@ import {
   forwardRef,
   useImperativeHandle,
 } from "react";
-import { Send, Square as Stop, Slash, Paperclip } from "lucide-react";
+import { Send, Square as Stop, Slash, Paperclip, FileText } from "lucide-react";
 import { isImeComposing } from "./keyboard";
 import { useI18n } from "../../components/useI18n";
 import { SLASH_COMMANDS, type SlashCommand } from "./slashCommands";
@@ -18,6 +18,7 @@ import {
   type AttachmentError,
 } from "./attachmentUtils";
 import { AttachmentChip } from "../../components/AttachmentChip";
+import { PromptTemplatePicker } from "./PromptTemplatePicker";
 import {
   MAX_ATTACHMENTS_PER_MESSAGE,
   isTextFile,
@@ -89,6 +90,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
     const [slashMenuOpen, setSlashMenuOpen] = useState(false);
     const [slashFilter, setSlashFilter] = useState("");
     const [slashSelectedIndex, setSlashSelectedIndex] = useState(0);
+    const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
     const [attachments, setAttachments] = useState<Attachment[]>([]);
     const [attachmentError, setAttachmentError] = useState<string | null>(null);
     const [mentionOpen, setMentionOpen] = useState(false);
@@ -357,6 +359,15 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       const sendAttachments = attachments;
       clearAfterSend(text);
       onSubmit(text, sendAttachments);
+    }
+
+    function handleTemplateSelect(content: string): void {
+      setInput((prev) => (prev ? prev + "\n" + content : content));
+      setTemplatePickerOpen(false);
+      requestAnimationFrame(() => {
+        if (inputRef.current) resizeChatTextarea(inputRef.current);
+        inputRef.current?.focus();
+      });
     }
 
     function handleSlashSelect(cmd: SlashCommand): void {
@@ -642,6 +653,11 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
             </div>
           </div>
         )}
+        <PromptTemplatePicker
+          open={templatePickerOpen}
+          onClose={() => setTemplatePickerOpen(false)}
+          onSelect={handleTemplateSelect}
+        />
         {(attachments.length > 0 || attachmentError) && (
           <div className="chat-attachment-strip">
             {attachments.map((att) => (
@@ -675,6 +691,15 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
             type="button"
           >
             <Paperclip size={16} />
+          </button>
+          <button
+            className="chat-attach-btn"
+            onClick={() => setTemplatePickerOpen(!templatePickerOpen)}
+            disabled={isLoading}
+            title={t("chat.templates.title")}
+            type="button"
+          >
+            <FileText size={16} />
           </button>
           <textarea
             ref={inputRef}

@@ -1,31 +1,32 @@
-/* 对话 → 思考 → 执行 → 结果 四段式 Agent 流 */
+/* 对话 → 思考 → 执行 → 结果 四段式 Agent 流 — Qoder-style */
 
 .paradigm-dialogue {
-  padding: 12px 0 8px;
-  border-top: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
+  padding: 10px 0 6px;
+  border-top: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.06));
 }
 
 .paradigm-dialogue-row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px 12px;
+  gap: 6px 10px;
 }
 
 .paradigm-file-chip {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
+  gap: 5px;
+  padding: 3px 9px;
   border-radius: 6px;
-  background: var(--surface-elevated, #2a2a2a);
-  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.1));
-  font-size: 13px;
+  background: var(--bg-elevated, #2a2a2a);
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.06));
+  font-size: 12.5px;
   color: var(--text-primary, #e8e8e8);
+  font-family: var(--font-sans);
 }
 
 .paradigm-file-chip-icon {
-  color: var(--text-secondary, #9ca3af);
+  color: var(--text-muted, #8e8e8e);
   flex-shrink: 0;
 }
 
@@ -37,51 +38,70 @@
 }
 
 .paradigm-dialogue-action {
-  font-size: 13px;
+  font-size: 12.5px;
   color: var(--text-secondary, #a3a3a3);
 }
 
 .paradigm-dialogue-text {
-  margin-top: 8px;
+  margin-top: 6px;
   font-size: 14px;
-  line-height: 1.55;
+  line-height: 1.6;
   color: var(--text-primary, #e8e8e8);
   white-space: pre-wrap;
 }
 
 .paradigm-dialogue-attachments {
-  margin-top: 8px;
+  margin-top: 6px;
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
 }
 
+/* ── Agent turn container ─────────────────────────── */
 .paradigm-agent-turn {
-  /* Performance: prevent layout recalculation of collapsed sections */
   contain: layout style;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 4px 0 16px;
-  font-family: var(--font-agent, "Courier New", Consolas, monospace);
+  gap: 2px;
+  padding: 2px 0 14px;
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  line-height: 1.55;
 }
 
+/* ── Phase sections ───────────────────────────────── */
 .paradigm-phase {
-  margin: 2px 0;
+  margin: 1px 0;
+  border-left: 2px solid var(--border, rgba(255, 255, 255, 0.06));
+  border-radius: 0;
+}
+
+.paradigm-phase--thinking {
+  border-left-color: rgba(168, 130, 255, 0.35);
+}
+
+.paradigm-phase--execution {
+  border-left-color: rgba(34, 197, 94, 0.25);
+}
+
+.paradigm-phase--result {
+  border-left-color: rgba(56, 189, 248, 0.30);
 }
 
 .paradigm-phase-head {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 7px;
   width: 100%;
-  padding: 6px 0;
+  padding: 5px 0 5px 10px;
   border: none;
   background: transparent;
-  color: var(--text-secondary, #9ca3af);
-  font-size: 13px;
+  color: var(--text-secondary, #b4b4b4);
+  font-size: 12.5px;
+  font-family: var(--font-sans);
   cursor: pointer;
   text-align: left;
+  letter-spacing: 0.01em;
 }
 
 .paradigm-phase-head--static {
@@ -89,22 +109,35 @@
 }
 
 .paradigm-phase-head:hover:not(.paradigm-phase-head--static) {
-  color: var(--text-primary, #d4d4d4);
+  color: var(--text-primary, #ececec);
 }
 
 .paradigm-phase-icon {
   flex-shrink: 0;
-  opacity: 0.85;
+  opacity: 0.9;
+}
+
+.paradigm-phase--thinking .paradigm-phase-icon {
+  color: #a78bfa;
+}
+
+.paradigm-phase--execution .paradigm-phase-icon {
+  color: var(--accent, #22c55e);
+}
+
+.paradigm-phase--result .paradigm-phase-icon {
+  color: #38bdf8;
 }
 
 .paradigm-phase-title {
   font-weight: 500;
+  letter-spacing: 0.01em;
 }
 
 .paradigm-phase-chevron {
   margin-left: auto;
-  opacity: 0.6;
-  transition: transform 0.15s ease;
+  opacity: 0.45;
+  transition: transform 0.18s ease;
 }
 
 .paradigm-phase-chevron--open {
@@ -116,41 +149,45 @@
 }
 
 .paradigm-phase-body--thinking {
-  padding-left: 0;
+  padding-left: 12px;
 }
 
 .paradigm-phase-body--result {
-  padding-left: 0;
+  padding-left: 12px;
   padding-right: 0;
 }
 
 .paradigm-phase--result .paradigm-phase-head {
-  color: var(--text-secondary, #9ca3af);
+  color: var(--text-secondary, #b4b4b4);
 }
 
 .paradigm-processing {
   margin-left: auto;
-  font-size: 12px;
-  color: var(--text-muted, #737373);
+  font-size: 11.5px;
+  color: var(--text-muted, #8e8e8e);
+  font-style: italic;
 }
 
+/* ── Execution lines ──────────────────────────────── */
 .paradigm-exec-line {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 3px 0;
-  font-size: 13px;
-  color: var(--text-secondary, #a3a3a3);
+  gap: 7px;
+  padding: 2px 0;
+  font-size: 12.5px;
+  color: var(--text-secondary, #b4b4b4);
+  font-family: var(--font-sans);
 }
 
 .paradigm-exec-em {
-  color: var(--text-primary, #e5e5e5);
+  color: var(--text-primary, #ececec);
+  font-weight: 500;
 }
 
 .paradigm-exec-detail {
   margin-left: 4px;
-  font-size: 12px;
-  color: var(--text-muted, #737373);
+  font-size: 11.5px;
+  color: var(--text-muted, #8e8e8e);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -159,7 +196,7 @@
 
 .paradigm-exec-icon {
   flex-shrink: 0;
-  opacity: 0.75;
+  opacity: 0.8;
 }
 
 .paradigm-exec-icon--done {
@@ -167,8 +204,8 @@
 }
 
 .paradigm-exec-spin {
-  animation: paradigm-spin 0.9s linear infinite;
-  color: var(--text-muted, #737373);
+  animation: paradigm-spin 0.85s linear infinite;
+  color: var(--text-muted, #8e8e8e);
 }
 
 @keyframes paradigm-spin {
@@ -177,39 +214,42 @@
   }
 }
 
+/* ── Terminal block ───────────────────────────────── */
 .paradigm-terminal {
-  margin: 6px 0 10px;
+  margin: 4px 0 8px;
   border-radius: 8px;
   overflow: hidden;
-  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.12));
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.06));
   border-top: 2px solid var(--accent, #22c55e);
-  background: var(--surface-inset, #141414);
+  background: var(--bg-secondary, #171717);
 }
 
 .paradigm-terminal-bar {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  font-size: 12px;
+  gap: 7px;
+  padding: 6px 11px;
+  font-size: 11.5px;
+  font-family: var(--font-sans);
+  font-weight: 500;
   color: var(--accent, #4ade80);
-  border-bottom: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.06));
+  border-bottom: 1px solid var(--border, rgba(255, 255, 255, 0.04));
 }
 
 .paradigm-terminal-cmd {
   margin: 0;
-  padding: 10px 12px;
+  padding: 8px 11px;
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 12px;
-  line-height: 1.45;
+  line-height: 1.5;
   color: var(--text-primary, #e8e8e8);
   white-space: pre-wrap;
   word-break: break-all;
 }
 
 .paradigm-todos-inline {
-  margin-top: 12px;
-  padding: 0 clamp(28px, 10vw, 96px);
+  margin-top: 10px;
+  padding: 0 clamp(24px, 8vw, 80px);
   max-width: min(100%, 56rem);
   margin-left: auto;
   margin-right: auto;
@@ -218,22 +258,24 @@
 
 .paradigm-exec-chevron {
   margin-left: 4px;
-  opacity: 0.5;
+  opacity: 0.4;
 }
 
+/* ── Stall banner ─────────────────────────────────── */
 .paradigm-stall-banner {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  margin: 4px 0 10px;
-  padding: 10px 12px;
+  margin: 4px 0 8px;
+  padding: 8px 12px;
   border-radius: 8px;
-  border: 1px solid rgba(234, 179, 8, 0.35);
-  background: rgba(234, 179, 8, 0.08);
-  font-size: 13px;
+  border: 1px solid rgba(234, 179, 8, 0.3);
+  background: rgba(234, 179, 8, 0.06);
+  font-size: 12.5px;
   line-height: 1.45;
-  color: var(--text-primary, #e8e8e8);
+  color: var(--text-primary, #ececec);
+  font-family: var(--font-sans);
 }
 
 .paradigm-stall-banner p {
@@ -242,16 +284,129 @@
 
 .paradigm-stall-cancel {
   flex-shrink: 0;
-  padding: 4px 10px;
+  padding: 3px 9px;
   border-radius: 6px;
-  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.2));
+  border: 1px solid var(--border-bright, rgba(255, 255, 255, 0.15));
   background: transparent;
-  color: var(--text-primary, #e8e8e8);
-  font-size: 12px;
+  color: var(--text-primary, #ececec);
+  font-size: 11.5px;
   cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
 }
 
 .paradigm-stall-cancel:hover {
   border-color: var(--accent, #22c55e);
   color: var(--accent, #4ade80);
+}
+
+/* ── Exec wrap (groups line + detail) ───────────────── */
+.paradigm-exec-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+/* ── Tool call detail panel ─────────────────────────── */
+.paradigm-tool-detail {
+  margin-left: 19px;
+  margin-top: 1px;
+  margin-bottom: 3px;
+}
+
+.paradigm-tool-detail-toggle {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 0;
+  border: none;
+  background: transparent;
+  color: var(--text-muted, #8e8e8e);
+  font-size: 11px;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  opacity: 0.7;
+  transition: opacity 0.15s ease, color 0.15s ease;
+}
+
+.paradigm-tool-detail-toggle:hover {
+  opacity: 1;
+  color: var(--text-secondary, #b4b4b4);
+}
+
+.paradigm-tool-detail-icon {
+  flex-shrink: 0;
+}
+
+.paradigm-tool-detail-chevron {
+  margin-left: 2px;
+  opacity: 0.5;
+  transition: transform 0.18s ease;
+}
+
+.paradigm-tool-detail-chevron--open {
+  transform: rotate(180deg);
+}
+
+.paradigm-tool-detail-body {
+  margin-top: 3px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--bg-secondary, #171717);
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.05));
+  font-size: 11.5px;
+}
+
+.paradigm-tool-detail-section {
+  margin-bottom: 6px;
+}
+
+.paradigm-tool-detail-section:last-child {
+  margin-bottom: 0;
+}
+
+.paradigm-tool-detail-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10.5px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted, #8e8e8e);
+  margin-bottom: 3px;
+}
+
+.paradigm-tool-detail-text {
+  position: relative;
+}
+
+.paradigm-tool-detail-text pre {
+  margin: 0;
+  padding: 0;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-secondary, #b4b4b4);
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.paradigm-tool-detail-expand {
+  display: inline-block;
+  margin-top: 2px;
+  padding: 1px 6px;
+  border: none;
+  background: transparent;
+  color: var(--accent, #4ade80);
+  font-size: 10.5px;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  opacity: 0.8;
+}
+
+.paradigm-tool-detail-expand:hover {
+  opacity: 1;
+  text-decoration: underline;
 }

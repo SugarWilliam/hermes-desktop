@@ -1180,6 +1180,111 @@ export function setPlatformEnabled(
   }
 }
 
+// ── Platform detailed config ──────────────────────────────
+//
+// Read/write arbitrary key-value pairs under a platform's top-level
+// block in config.yaml. This is used for bot tokens, channel IDs,
+// webhook URLs, and other platform-specific settings that the Python
+// gateway may read.
+
+export function getPlatformConfig(
+  platform: string,
+  profile?: string,
+): Record<string, string> {
+  const rule = PLATFORM_RULES[platform];
+  const configKey = rule?.configKey || platform;
+  const { configFile } = profilePaths(profile);
+  if (!existsSync(configFile)) return {};
+  const content = readFileSync(configFile, "utf-8");
+
+  const result: Record<string, string> = {};
+  // Find the platform block
+  const blockRe = new RegExp(
+    `^${escapeRegex(configKey)}:[ \\t]*\\r?\\n((?:[ \\t]+.+\\r?\\n)*)`,
+    "m",
+  );
+  const blockMatch = content.match(blockRe);
+  if (!blockMatch) return result;
+  const block = blockMatch[1];
+  // Parse key: value lines (2-space indent)
+  const lineRe = /^[ ]{2}([\w][\w-]*):\s*(.*?)\s*$/gm;
+  let m: RegExpExecArray | null;
+  while ((m = lineRe.exec(block)) !== null) {
+    const key = m[1];
+    let val = m[2];
+    // Strip quotes
+    if (
+      (val.startsWith('"') && val.endsWith('"')) ||
+      (val.startsWith("'") && val.endsWith("'"))
+    ) {
+      val = val.slice(1, -1);
+    }
+    result[key] = val;
+  }
+  return result;
+}
+
+export function setPlatformConfigValue(
+  platform: string,
+  key: string,
+  value: string,
+  profile?: string,
+): boolean {
+  const rule = PLATFORM_RULES[platform];
+  const configKey = rule?.configKey || platform;
+  const { configFile } = profilePaths(profile);
+
+  let content = existsSync(configFile)
+    ? readFileSync(configFile, "utf-8")
+    : "";
+
+  // Check if the platform block exists
+  const blockRe = new RegExp(
+    `^(${escapeRegex(configKey)}:[ \\t]*\\r?\\n)((?:[ \\t]+.+\\r?\\n)*)`,
+    "m",
+  );
+  const blockMatch = content.match(blockRe);
+
+  const escapedKey = escapeRegex(key);
+  const escapedVal = value
+    .replace(/\\/g, "\\\\")
+    .replace(/"/g, '\\"')
+    .replace(/\n/g, "\\n")
+    .replace(/\r/g, "\\r");
+
+  if (blockMatch && blockMatch.index !== undefined) {
+    const blockStart = blockMatch.index + blockMatch[0].length - blockMatch[2].length;
+    const block = blockMatch[2];
+    // Check if the key already exists
+    const keyRe = new RegExp(`^([ ]{2}${escapedKey}:\\s*)(.*)$`, "m");
+    const keyMatch = keyRe.exec(block);
+    if (keyMatch) {
+      // Replace existing value
+      const newBlock =
+        block.slice(0, keyMatch.index) +
+        `  ${key}: "${escapedVal}"` +
+        block.slice(keyMatch.index + keyMatch[0].length);
+      content =
+        content.slice(0, blockMatch.index) +
+        blockMatch[1] + newBlock +
+        content.slice(blockMatch.index + blockMatch[0].length);
+    } else {
+      // Add new key-value as first child
+      content =
+        content.slice(0, blockStart) +
+        `  ${key}: "${escapedVal}"\n` +
+        content.slice(blockStart);
+    }
+  } else {
+    // Create new platform block
+    const trailing = content.endsWith("\n") ? "" : "\n";
+    content += `${trailing}${configKey}:\n  ${key}: "${escapedVal}"\n`;
+  }
+
+  safeWriteFile(configFile, content);
+  return true;
+}
+
 // ── Credential Pool / OAuth store (auth.json) ─────────────────────────
 
 function authFilePath(profile?: string): string {

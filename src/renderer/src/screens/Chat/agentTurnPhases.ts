@@ -11,6 +11,8 @@ export type ExecutionItem =
       id: string;
       path: string;
       name: string;
+      args?: string;
+      result?: string;
     }
   | {
       type: "terminal";
@@ -18,12 +20,16 @@ export type ExecutionItem =
       command: string;
       running: boolean;
       label?: string;
+      args?: string;
+      result?: string;
     }
   | {
       type: "skill";
       id: string;
       name: string;
       done: boolean;
+      args?: string;
+      result?: string;
     }
   | {
       type: "tool";
@@ -31,6 +37,8 @@ export type ExecutionItem =
       name: string;
       detail?: string;
       done: boolean;
+      args?: string;
+      result?: string;
     }
   | {
       type: "progress";
@@ -41,6 +49,8 @@ export type ExecutionItem =
       type: "todo_update";
       id: string;
       done: boolean;
+      args?: string;
+      result?: string;
     }
   | {
       type: "exploring";
@@ -107,9 +117,12 @@ function commandFromTool(args: string): string | null {
 function classifyToolCall(
   tc: ToolCallMessage,
   done: boolean,
+  resultContent?: string,
 ): ExecutionItem | ExecutionItem[] {
   const n = tc.name.toLowerCase();
   const path = pathFromToolArgs(tc.args);
+  const args = tc.args || undefined;
+  const result = resultContent || undefined;
 
   if (
     path &&
@@ -125,6 +138,8 @@ function classifyToolCall(
       id: tc.id,
       path,
       name: basename(path),
+      args,
+      result,
     };
   }
 
@@ -143,6 +158,8 @@ function classifyToolCall(
       command,
       running: !done,
       label: n,
+      args,
+      result,
     };
   }
 
@@ -157,6 +174,8 @@ function classifyToolCall(
       id: tc.id,
       name: String(skillName),
       done,
+      args,
+      result,
     };
   }
 
@@ -165,6 +184,8 @@ function classifyToolCall(
       type: "todo_update",
       id: tc.id,
       done,
+      args,
+      result,
     };
   }
 
@@ -175,6 +196,8 @@ function classifyToolCall(
     name: tc.name,
     detail,
     done,
+    args,
+    result,
   };
 }
 
@@ -197,7 +220,8 @@ export function buildAgentTurnPhases(turn: ReadonlyArray<ChatMessage>): AgentTur
     } else if (m.kind === "tool_call") {
       const tr = resultsByCall.get(m.callId || m.id);
       const done = !!tr;
-      const item = classifyToolCall(m, done);
+      const resultContent = tr?.content || undefined;
+      const item = classifyToolCall(m, done, resultContent);
       if (Array.isArray(item)) execution.push(...item);
       else execution.push(item);
     } else if (isAgentBubble(m) && m.content.trim()) {

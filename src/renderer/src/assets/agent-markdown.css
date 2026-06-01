@@ -67,6 +67,8 @@
   --md-token-number: #b5cea8;
   --md-token-boolean: #569cd6;
   --md-token-keyword: #569cd6;
+  --md-token-function: #dcdcaa;
+  --md-token-class: #4ec9b0;
   --md-token-operator: #d4d4d4;
   --md-lang-cpp: #7ec8e3;
   --md-lang-c: #7ec8e3;
@@ -447,8 +449,8 @@
 /* ----- Fenced code blocks ----- */
 .agent-markdown .chat-code-block {
   margin: 1.15em 0 !important;
-  border: none;
-  border-radius: 4px;
+  border: 1px solid var(--md-border-subtle);
+  border-radius: 8px;
   overflow: hidden;
   background: var(--md-code-surface);
 }
@@ -459,11 +461,24 @@
   justify-content: space-between;
   background: var(--md-code-header);
   border-bottom: 1px solid var(--md-border-subtle);
-  padding: 5px 12px;
-  min-height: 28px;
+  padding: 6px 14px;
+  min-height: 32px;
+}
+
+/* Language-coloured dot in code header */
+.chat-code-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  margin-right: 6px;
+  background: var(--md-muted);
+  flex-shrink: 0;
 }
 
 .agent-markdown .chat-code-lang {
+  display: inline-flex;
+  align-items: center;
   color: var(--md-muted);
   font-size: 12px;
   font-weight: 500;
@@ -550,6 +565,15 @@
   line-height: 1.55 !important;
 }
 
+/* Prism line numbers */
+.agent-markdown .chat-code-block .linenumber {
+  color: rgba(255, 255, 255, 0.18) !important;
+  min-width: 2.5em !important;
+  padding-right: 1em !important;
+  text-align: right;
+  user-select: none;
+}
+
 .agent-markdown .token.comment,
 .agent-markdown .token.prolog,
 .agent-markdown .token.doctype {
@@ -587,10 +611,17 @@
   color: var(--md-token-boolean);
 }
 
-.agent-markdown .token.function,
-.agent-markdown .token.class-name,
 .agent-markdown .token.keyword {
   color: var(--md-token-keyword);
+  font-weight: 500;
+}
+
+.agent-markdown .token.function {
+  color: var(--md-token-function);
+}
+
+.agent-markdown .token.class-name {
+  color: var(--md-token-class);
 }
 
 .agent-markdown .token.operator,
@@ -620,9 +651,22 @@
 }
 
 .agent-markdown .token.important,
-.agent-markdown .token.atrule,
+.agent-markdown .token.atrule {
+  color: var(--md-code-macro);
+}
+
 .agent-markdown .token.regex {
-  color: var(--md-token-keyword);
+  color: var(--md-token-string);
+}
+
+/* C/C++ preprocessor directives (#include, #define) */
+.agent-markdown .token.directive {
+  color: var(--md-code-macro);
+}
+
+.agent-markdown .token.macro {
+  color: var(--md-code-macro);
+  font-weight: 500;
 }
 
 .agent-markdown .token.inserted {
@@ -645,6 +689,77 @@
 .agent-markdown .chat-code-lang.md-code-lang--c,
 .agent-markdown .chat-code-lang.md-code-lang--cpp {
   color: var(--md-lang-cpp);
+}
+
+/* Language dot colors — match each lang label color */
+.chat-code-lang.md-code-lang--c .chat-code-dot,
+.chat-code-lang.md-code-lang--cpp .chat-code-dot {
+  background: var(--md-lang-cpp);
+}
+
+.chat-code-lang.md-code-lang--python .chat-code-dot {
+  background: var(--md-lang-python);
+}
+
+.chat-code-lang.md-code-lang--javascript .chat-code-dot,
+.chat-code-lang.md-code-lang--jsx .chat-code-dot {
+  background: var(--md-lang-javascript);
+}
+
+.chat-code-lang.md-code-lang--typescript .chat-code-dot,
+.chat-code-lang.md-code-lang--tsx .chat-code-dot {
+  background: var(--md-lang-typescript);
+}
+
+.chat-code-lang.md-code-lang--bash .chat-code-dot,
+.chat-code-lang.md-code-lang--shell .chat-code-dot {
+  background: var(--md-lang-bash);
+}
+
+.chat-code-lang.md-code-lang--rust .chat-code-dot {
+  background: var(--md-lang-rust);
+}
+
+.chat-code-lang.md-code-lang--go .chat-code-dot {
+  background: var(--md-lang-go);
+}
+
+.chat-code-lang.md-code-lang--java .chat-code-dot {
+  background: var(--md-lang-java);
+}
+
+.chat-code-lang.md-code-lang--json .chat-code-dot {
+  background: var(--md-lang-json);
+}
+
+.chat-code-lang.md-code-lang--yaml .chat-code-dot,
+.chat-code-lang.md-code-lang--ini .chat-code-dot {
+  background: var(--md-lang-yaml);
+}
+
+.chat-code-lang.md-code-lang--markdown .chat-code-dot {
+  background: var(--md-lang-markdown);
+}
+
+.chat-code-lang.md-code-lang--html .chat-code-dot {
+  background: var(--md-lang-cpp);
+}
+
+.chat-code-lang.md-code-lang--css .chat-code-dot,
+.chat-code-lang.md-code-lang--scss .chat-code-dot {
+  background: var(--md-lang-typescript);
+}
+
+.chat-code-lang.md-code-lang--sql .chat-code-dot {
+  background: var(--md-lang-javascript);
+}
+
+.chat-code-lang.md-code-lang--diff .chat-code-dot {
+  background: var(--md-status-warn, #e5c07b);
+}
+
+.chat-code-lang.md-code-lang--mermaid .chat-code-dot {
+  background: var(--md-lang-python);
 }
 
 .agent-markdown .chat-diff-content {

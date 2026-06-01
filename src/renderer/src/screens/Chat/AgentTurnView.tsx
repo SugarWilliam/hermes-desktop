@@ -1,13 +1,14 @@
 import { memo, useMemo, useState } from "react";
 import {
-  Brain,
+  Lightbulb,
   ChevronDown,
   Check,
   Loader2,
   Terminal,
+  Wrench,
   Search,
   ListTodo,
-  Sparkles,
+  MessageSquareText,
 } from "lucide-react";
 import { useI18n } from "../../components/useI18n";
 import { AgentMarkdown } from "../../components/AgentMarkdown";
@@ -16,6 +17,7 @@ import { AgentTodoPanel } from "./AgentTodoPanel";
 import { RigorousPhaseView } from "../../components/RigorousPhaseView";
 import { PlanTodoView } from "../../components/PlanTodoView";
 import { TurnMetrics } from "../../components/TurnMetrics";
+import { ToolCallDetail } from "./ToolCallDetail";
 import type { TurnMetricsData } from "../../components/TurnMetrics";
 import type { AgentTodoItem } from "./agentTodos";
 import type { AgentTurnPhases, ExecutionItem } from "./agentTurnPhases";
@@ -47,52 +49,61 @@ function ExecutionLine({ item }: { item: ExecutionItem }): React.JSX.Element {
 
   if (item.type === "viewed") {
     return (
-      <div className="paradigm-exec-line paradigm-exec-line--viewed">
-        <Check
-          size={12}
-          className="paradigm-exec-icon paradigm-exec-icon--done"
-        />
-        <span>
-          {t("chat.phase.viewed")}{" "}
-          <span className="paradigm-exec-em">{item.name}</span>
-        </span>
+      <div className="paradigm-exec-wrap">
+        <div className="paradigm-exec-line paradigm-exec-line--viewed">
+          <Check
+            size={12}
+            className="paradigm-exec-icon paradigm-exec-icon--done"
+          />
+          <span>
+            {t("chat.phase.viewed")}{" "}
+            <span className="paradigm-exec-em">{item.name}</span>
+          </span>
+        </div>
+        <ToolCallDetail args={item.args} result={item.result} />
       </div>
     );
   }
 
   if (item.type === "skill") {
     return (
-      <div className="paradigm-exec-line paradigm-exec-line--skill">
-        {item.done ? (
-          <Check
-            size={12}
-            className="paradigm-exec-icon paradigm-exec-icon--done"
-          />
-        ) : (
-          <Loader2
-            size={12}
-            className="paradigm-exec-icon paradigm-exec-spin"
-          />
-        )}
-        <span>
-          Skill <span className="paradigm-exec-em">{item.name}</span>
-        </span>
+      <div className="paradigm-exec-wrap">
+        <div className="paradigm-exec-line paradigm-exec-line--skill">
+          {item.done ? (
+            <Check
+              size={12}
+              className="paradigm-exec-icon paradigm-exec-icon--done"
+            />
+          ) : (
+            <Loader2
+              size={12}
+              className="paradigm-exec-icon paradigm-exec-spin"
+            />
+          )}
+          <span>
+            Skill <span className="paradigm-exec-em">{item.name}</span>
+          </span>
+        </div>
+        <ToolCallDetail args={item.args} result={item.result} />
       </div>
     );
   }
 
   if (item.type === "terminal") {
     return (
-      <div className="paradigm-terminal">
-        <div className="paradigm-terminal-bar">
-          {item.running ? (
-            <Loader2 size={13} className="paradigm-exec-spin" />
-          ) : (
-            <Terminal size={13} />
-          )}
-          <span>{t("chat.phase.terminalRunning")}</span>
+      <div className="paradigm-exec-wrap">
+        <div className="paradigm-terminal">
+          <div className="paradigm-terminal-bar">
+            {item.running ? (
+              <Loader2 size={13} className="paradigm-exec-spin" />
+            ) : (
+              <Terminal size={13} />
+            )}
+            <span>{t("chat.phase.terminalRunning")}</span>
+          </div>
+          <pre className="paradigm-terminal-cmd">{item.command}</pre>
         </div>
-        <pre className="paradigm-terminal-cmd">{item.command}</pre>
+        <ToolCallDetail args={item.args} result={item.result} />
       </div>
     );
   }
@@ -109,13 +120,16 @@ function ExecutionLine({ item }: { item: ExecutionItem }): React.JSX.Element {
 
   if (item.type === "todo_update") {
     return (
-      <div className="paradigm-exec-line">
-        <ListTodo size={12} className="paradigm-exec-icon" />
-        <span>
-          {item.done
-            ? t("chat.phase.todoUpdated")
-            : t("chat.phase.todoUpdating")}
-        </span>
+      <div className="paradigm-exec-wrap">
+        <div className="paradigm-exec-line">
+          <ListTodo size={12} className="paradigm-exec-icon" />
+          <span>
+            {item.done
+              ? t("chat.phase.todoUpdated")
+              : t("chat.phase.todoUpdating")}
+          </span>
+        </div>
+        <ToolCallDetail args={item.args} result={item.result} />
       </div>
     );
   }
@@ -130,19 +144,22 @@ function ExecutionLine({ item }: { item: ExecutionItem }): React.JSX.Element {
   }
 
   return (
-    <div className="paradigm-exec-line">
-      {item.done ? (
-        <Check
-          size={12}
-          className="paradigm-exec-icon paradigm-exec-icon--done"
-        />
-      ) : (
-        <Loader2 size={12} className="paradigm-exec-icon paradigm-exec-spin" />
-      )}
-      <span className="paradigm-exec-em">{item.name}</span>
-      {item.detail && (
-        <span className="paradigm-exec-detail">{item.detail}</span>
-      )}
+    <div className="paradigm-exec-wrap">
+      <div className="paradigm-exec-line">
+        {item.done ? (
+          <Check
+            size={12}
+            className="paradigm-exec-icon paradigm-exec-icon--done"
+          />
+        ) : (
+          <Loader2 size={12} className="paradigm-exec-icon paradigm-exec-spin" />
+        )}
+        <span className="paradigm-exec-em">{item.name}</span>
+        {item.detail && (
+          <span className="paradigm-exec-detail">{item.detail}</span>
+        )}
+      </div>
+      <ToolCallDetail args={item.args} result={item.result} />
     </div>
   );
 }
@@ -245,7 +262,7 @@ export const AgentTurnView = memo(function AgentTurnView({
             className="paradigm-phase-head"
             onClick={() => setThinkOpen((o) => !o)}
           >
-            <Brain size={14} className="paradigm-phase-icon" />
+            <Lightbulb size={14} className="paradigm-phase-icon" />
             <span className="paradigm-phase-title">
               {chatMode === "rigorous"
                 ? t("chat.phase.rigorousThinking")
@@ -287,7 +304,7 @@ export const AgentTurnView = memo(function AgentTurnView({
             className="paradigm-phase-head"
             onClick={() => setExecOpen((o) => !o)}
           >
-            <Terminal size={14} className="paradigm-phase-icon" />
+            <Wrench size={14} className="paradigm-phase-icon" />
             <span className="paradigm-phase-title">
               {t("chat.phase.execution")}
             </span>
@@ -319,7 +336,7 @@ export const AgentTurnView = memo(function AgentTurnView({
       {(hasResult || showProcessing) && (
         <div className="paradigm-phase paradigm-phase--result">
           <div className="paradigm-phase-head paradigm-phase-head--static">
-            <Sparkles size={14} className="paradigm-phase-icon" />
+            <MessageSquareText size={14} className="paradigm-phase-icon" />
             <span className="paradigm-phase-title">
               {t("chat.phase.result")}
             </span>

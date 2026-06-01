@@ -1,4 +1,5 @@
 import { memo, useMemo, useState } from "react";
+import { Bookmark } from "lucide-react";
 import { AgentMarkdown } from "../../components/AgentMarkdown";
 import { AttachmentChip } from "../../components/AttachmentChip";
 import { MediaSegmentView } from "../../components/MediaImage";
@@ -23,6 +24,8 @@ interface MessageRowProps {
   workspaceRoot?: string | null;
   onApprove: () => void;
   onDeny: () => void;
+  onFork?: (messageId: string) => void;
+  onBookmark?: (messageId: string) => void;
 }
 
 export const MessageRow = memo(function MessageRow({
@@ -32,6 +35,8 @@ export const MessageRow = memo(function MessageRow({
   workspaceRoot,
   onApprove,
   onDeny,
+  onFork,
+  onBookmark,
 }: MessageRowProps): React.JSX.Element {
   const { t } = useI18n();
   const [previewAttachment, setPreviewAttachment] = useState<Attachment | null>(
@@ -105,6 +110,24 @@ export const MessageRow = memo(function MessageRow({
           <AgentMarkdown variant="chat" workspaceRoot={workspaceRoot ?? undefined}>{msg.content}</AgentMarkdown>
         )}
       </div>
+      {msg.role === "user" && onFork && msg.id?.startsWith("db-") && (
+        <button
+          className="chat-fork-btn"
+          title={t("chat.forkFromHere")}
+          onClick={() => onFork(msg.id)}
+        >
+          ⑂ {t("chat.fork")}
+        </button>
+      )}
+      {msg.role === "user" && onBookmark && msg.id?.startsWith("db-") && (
+        <button
+          className="chat-bookmark-btn"
+          title={t("chat.addBookmark")}
+          onClick={() => onBookmark(msg.id)}
+        >
+          <Bookmark size={12} />
+        </button>
+      )}
       {showApprovalBar && (
         <div className="chat-approval-bar">
           <button

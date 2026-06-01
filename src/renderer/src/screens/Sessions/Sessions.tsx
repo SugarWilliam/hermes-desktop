@@ -1,5 +1,7 @@
 import { useEffect, useState, useRef, useCallback, memo } from "react";
 import { Plus, Search, X, ChatBubble, Download } from "../../assets/icons";
+import { Sparkles, Bookmark } from "lucide-react";
+import { BookmarkList } from "./BookmarkList";
 import { useI18n } from "../../components/useI18n";
 import { useToast } from "../../components/Toast";
 
@@ -112,16 +114,22 @@ const SessionCard = memo(function SessionCard({
   showFullDate,
   onClick,
   onExport,
+  onAiSummary,
 }: {
   session: CachedSession;
   isActive: boolean;
   showFullDate: boolean;
   onClick: () => void;
   onExport: (sessionId: string) => void;
+  onAiSummary: (sessionId: string) => void;
 }) {
   const handleExport = (e: React.MouseEvent) => {
     e.stopPropagation();
     onExport(session.id);
+  };
+  const handleAiSummary = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onAiSummary(session.id);
   };
 
   return (
@@ -152,6 +160,14 @@ const SessionCard = memo(function SessionCard({
           </span>
         )}
       </div>
+      <button
+        className="sessions-card-export"
+        title="AI Summary"
+        onClick={handleAiSummary}
+        aria-label="AI Summary"
+      >
+        <Sparkles size={14} />
+      </button>
       <button
         className="sessions-card-export"
         title="Export as Markdown"
@@ -196,6 +212,41 @@ function Sessions({
       } else if (!result.canceled) {
         toast.addToast("error", result.error || t("sessions.exportError"));
       }
+    },
+    [t, toast],
+  );
+
+  const [aiSummaryText, setAiSummaryText] = useState<string | null>(null);
+  const [aiSummaryLoading, setAiSummaryLoading] = useState(false);
+  const [showBookmarks, setShowBookmarks] = useState(false);
+
+  const handleAiSummary = useCallback(
+    async (sessionId: string): Promise<void> => {
+      setAiSummaryLoading(true);
+      setAiSummaryText(null);
+      try {
+        const messages = await window.hermesAPI.getSessionMessages(sessionId);
+        const chatMessages = messages
+          .filter((m) => m.kind === "user" || m.kind === "assistant")
+          .map((m) => ({
+            role: m.kind === "user" ? "user" : "assistant",
+            content: m.content,
+          }));
+        if (chatMessages.length === 0) {
+          toast.addToast("error", t("sessions.aiSummaryNoMessages"));
+          setAiSummaryLoading(false);
+          return;
+        }
+        const result = await window.hermesAPI.generateLlmSummary(chatMessages);
+        if (result.success && result.summary) {
+          setAiSummaryText(result.summary);
+        } else {
+          toast.addToast("error", result.error || t("sessions.aiSummaryFailed"));
+        }
+      } catch (e) {
+        toast.addToast("error", e instanceof Error ? e.message : String(e));
+      }
+      setAiSummaryLoading(false);
     },
     [t, toast],
   );
@@ -296,6 +347,14 @@ function Sessions({
           <button className="btn btn-primary " onClick={onNewChat}>
             <Plus size={14} />
             {t("sessions.newChat")}
+          </button>
+          <button
+            className="btn btn-ghost"
+            onClick={() => setShowBookmarks((v) => !v)}
+            title={t("sessions.bookmarks")}
+            style={{ marginLeft: 4 }}
+          >
+            <Bookmark size={14} />
           </button>
         </div>
         <div className="sessions-searchbar">
@@ -415,10 +474,45 @@ function Sessions({
                   }
                   onClick={() => onResumeSession(s.id)}
                   onExport={handleExportSession}
+                  onAiSummary={handleAiSummary}
                 />
               ))}
             </div>
           ))}
+        </div>
+      )}
+
+      {aiSummaryLoading && (
+        <div className="sessions-summary-overlay">
+          <div className="sessions-summary-modal">
+            <div className="sessions-summary-loading">{t("sessions.aiSummaryLoading")}</div>
+          </div>
+        </div>
+      )}
+      {aiSummaryText && !aiSummaryLoading && (
+        <div className="sessions-summary-overlay" onClick={() => setAiSummaryText(null)}>
+          <div className="sessions-summary-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="sessions-summary-header">
+              <Sparkles size={14} />
+              <span>{t("sessions.aiSummaryTitle")}</span>
+              <button className="btn-ghost" onClick={() => setAiSummaryText(null)} type="button">×</button>
+            </div>
+            <div className="sessions-summary-body">{aiSummaryText}</div>
+          </div>
+        </div>
+      )}
+      {showBookmarks && (
+        <div className="sessions-summary-overlay" onClick={() => setShowBookmarks(false)}>
+          <div className="sessions-summary-modal" onClick={(e) => e.stopPropagation()} style={{ maxHeight: "70vh", overflow: "auto" }}>
+            <div className="sessions-summary-header">
+              <Bookmark size={14} />
+              <span>{t("sessions.bookmarks")}</span>
+              <button className="btn-ghost" onClick={() => setShowBookmarks(false)} type="button">×</button>
+            </div>
+            <div className="sessions-summary-body">
+              <BookmarkList onNavigate={(sessionId) => { setShowBookmarks(false); onResumeSession(sessionId); }} />
+            </div>
+          </div>
         </div>
       )}
     </div>

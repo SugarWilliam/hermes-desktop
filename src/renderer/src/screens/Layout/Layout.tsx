@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import Chat, { ChatMessage } from "../Chat/Chat";
 import {
   dbItemsToChatMessages,
@@ -154,6 +154,71 @@ function Layout({
     };
   }, [handleNewChat, goTo]);
 
+  // Global keyboard shortcuts from keybindings config
+  const keybindingsRef = useRef<Array<{ id: string; key: string }>>([]);
+  useEffect(() => {
+    window.hermesAPI.getKeybindings(activeProfile).then((kbs) => {
+      keybindingsRef.current = kbs.map((kb) => ({ id: kb.id, key: kb.key }));
+    });
+  }, [activeProfile]);
+
+  useEffect(() => {
+    function matchKeyCombo(combo: string, e: KeyboardEvent): boolean {
+      const parts = combo.split("+");
+      const needCtrl = parts.includes("CmdOrCtrl");
+      const needShift = parts.includes("Shift");
+      const needAlt = parts.includes("Alt");
+      const mainKey = parts.filter((p) => !["CmdOrCtrl", "Shift", "Alt"].includes(p))[0];
+      if (!mainKey) return false;
+      const ctrlOk = needCtrl ? (e.ctrlKey || e.metaKey) : !(e.ctrlKey || e.metaKey);
+      const shiftOk = needShift ? e.shiftKey : !e.shiftKey;
+      const altOk = needAlt ? e.altKey : !e.altKey;
+      const keyOk = e.key.toUpperCase() === mainKey.toUpperCase() || e.code === `Key${mainKey}`;
+      return ctrlOk && shiftOk && altOk && keyOk;
+    }
+
+    function handleGlobalKeydown(e: KeyboardEvent): void {
+      // Skip if in an input/textarea/contenteditable
+      const el = e.target as HTMLElement;
+      if (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable) return;
+      for (const kb of keybindingsRef.current) {
+        if (matchKeyCombo(kb.key, e)) {
+          e.preventDefault();
+          switch (kb.id) {
+            case "newChat": handleNewChat(); break;
+            case "clearChat":
+              window.hermesAPI.abortChat();
+              setMessages([]);
+              setCurrentSessionId(null);
+              setChatConversationKey((k) => k + 1);
+              break;
+            case "goToSettings": goTo("settings"); break;
+            case "goToSessions": goTo("sessions"); break;
+            case "focusInput": {
+              const input = document.querySelector(".chat-input textarea, .chat-input input") as HTMLElement | null;
+              input?.focus();
+              break;
+            }
+            case "toggleWorkspace": {
+              const btn = document.querySelector(".workspace-toggle-btn") as HTMLElement | null;
+              btn?.click();
+              break;
+            }
+            case "toggleFastMode": {
+              // Toggle fast mode via the chat header control
+              const fastBtn = document.querySelector(".chat-mode-select button, [data-testid='fast-mode-toggle']") as HTMLElement | null;
+              fastBtn?.click();
+              break;
+            }
+          }
+          return;
+        }
+      }
+    }
+    document.addEventListener("keydown", handleGlobalKeydown);
+    return () => document.removeEventListener("keydown", handleGlobalKeydown);
+  }, [handleNewChat, goTo]);
+
   const handleSelectProfile = useCallback((name: string) => {
     window.hermesAPI.abortChat();
     setActiveProfile(name);
@@ -174,6 +239,13 @@ function Layout({
       goTo("chat");
     },
     [goTo],
+  );
+
+  const handleForkSession = useCallback(
+    (newSessionId: string) => {
+      handleResumeSession(newSessionId);
+    },
+    [handleResumeSession],
   );
 
   const toggleSidebar = useCallback(() => {
@@ -305,6 +377,7 @@ function Layout({
             profile={activeProfile}
             onSessionIdChange={setCurrentSessionId}
             onNewChat={handleNewChat}
+            onForkSession={handleForkSession}
           />
         </div>
 

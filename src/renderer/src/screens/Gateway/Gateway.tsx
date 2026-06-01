@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { GATEWAY_SECTIONS, GATEWAY_PLATFORMS } from "../../constants";
 import { useI18n } from "../../components/useI18n";
 import BrandLogo from "../../components/common/BrandLogo";
+import { GatewayMetrics } from "./GatewayMetrics";
 
 function Gateway({ profile }: { profile?: string }): React.JSX.Element {
   const { t } = useI18n();
@@ -135,6 +136,12 @@ function Gateway({ profile }: { profile?: string }): React.JSX.Element {
           <div className="settings-field-hint">{t("gateway.gatewayHint")}</div>
         </div>
       </div>
+
+      {gatewayRunning && (
+        <div className="settings-section">
+          <GatewayMetrics profile={profile} />
+        </div>
+      )}
 
       <div className="settings-section">
         <div className="settings-section-title">{t("gateway.platforms")}</div>

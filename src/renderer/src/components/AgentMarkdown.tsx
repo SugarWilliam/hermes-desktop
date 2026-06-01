@@ -159,7 +159,10 @@ function CodeBlock({
   return (
     <div className={`chat-code-block ${langClass}`}>
       <div className="chat-code-header">
-        <span className={`chat-code-lang ${langClass}`}>{langLabel}</span>
+        <span className={`chat-code-lang ${langClass}`}>
+          <span className="chat-code-dot" />
+          {langLabel}
+        </span>
         <button type="button" className="chat-code-copy" onClick={handleCopy}>
           {copied ? t("common.copied") : <Copy size={13} />}
         </button>
@@ -177,6 +180,7 @@ function CodeBlock({
           PreTag="div"
           codeTagProps={prismCodeTagProps(language)}
           {...PRISM_BLOCK_OPTIONS}
+          showLineNumbers={code.split("\n").length >= 5}
           customStyle={{
             margin: 0,
             borderRadius: 0,

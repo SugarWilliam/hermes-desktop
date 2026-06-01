@@ -128,6 +128,7 @@ export function CodeEditor({
         fontSize: 13,
         fontFamily:
           "'JetBrains Mono', 'Fira Code', 'Cascadia Code', Consolas, monospace",
+        fontLigatures: true,
         lineNumbers: "on",
         minimap: { enabled: false },
         scrollBeyondLastLine: false,
@@ -136,11 +137,15 @@ export function CodeEditor({
         insertSpaces: true,
         automaticLayout: true,
         readOnly: false,
-        padding: { top: 8 },
-        renderLineHighlight: "line",
+        padding: { top: 12, bottom: 8 },
+        renderLineHighlight: "all",
         cursorBlinking: "smooth",
+        cursorSmoothCaretAnimation: "on",
+        smoothScrolling: true,
         bracketPairColorization: { enabled: true },
         guides: { indentation: true, bracketPairs: true },
+        renderWhitespace: "selection",
+        stickyScroll: { enabled: true },
       }}
       theme="vs-dark"
     />

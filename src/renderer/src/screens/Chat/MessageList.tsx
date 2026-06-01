@@ -28,6 +28,8 @@ interface MessageListProps {
   onAbort?: () => void;
   onApprove: () => void;
   onDeny: () => void;
+  onFork?: (messageId: string) => void;
+  onBookmark?: (messageId: string) => void;
 }
 
 function isBubble(m: ChatMessage): m is ChatBubbleMessage {
@@ -82,6 +84,8 @@ export const MessageList = memo(function MessageList({
   onAbort,
   onApprove,
   onDeny,
+  onFork,
+  onBookmark,
 }: MessageListProps): React.JSX.Element {
   const { t } = useI18n();
   const virtuosoRef = useRef(null);
@@ -238,6 +242,8 @@ export const MessageList = memo(function MessageList({
             workspaceRoot={workspaceRoot}
             onApprove={onApprove}
             onDeny={onDeny}
+            onFork={onFork}
+            onBookmark={onBookmark}
           />
         );
       }
@@ -261,7 +267,7 @@ export const MessageList = memo(function MessageList({
       return (
         <div key={key} className="chat-paradigm-turn" data-turn-index={turnIndex}>
           {turn.user && isBubble(turn.user) && turn.user.role === "user" && (
-            <DialogueBlock msg={turn.user} />
+            <DialogueBlock msg={turn.user} onFork={onFork} />
           )}
           {(turn.agent.length > 0 || isLive) && (
             <div className="chat-transcript-block chat-transcript-block--agent">
@@ -297,6 +303,7 @@ export const MessageList = memo(function MessageList({
       onAbort,
       onApprove,
       onDeny,
+      onFork,
       isLoading,
       turns,
       lastTurnIndex,

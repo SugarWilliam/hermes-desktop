@@ -51,6 +51,7 @@ interface ChatProps {
   onSessionIdChange?: (sessionId: string) => void;
   onSessionStarted?: () => void;
   onNewChat?: () => void;
+  onForkSession?: (newSessionId: string) => void;
 }
 
 function Chat({
@@ -62,6 +63,7 @@ function Chat({
   onSessionIdChange,
   onSessionStarted,
   onNewChat,
+  onForkSession,
 }: ChatProps): React.JSX.Element {
   const { t } = useI18n();
   const [isLoading, setIsLoading] = useState(false);
@@ -382,6 +384,28 @@ useEffect(() => {
     setToolProgressLog([]);
   }, [actions]);
 
+  const handleFork = useCallback(
+    async (messageId: string) => {
+      // Extract numeric DB ID from "db-123" format
+      const numericId = parseInt(messageId.replace(/^db-/, ""), 10);
+      if (!Number.isFinite(numericId) || !sessionId) return;
+      const result = await window.hermesAPI.forkSession(sessionId, numericId);
+      if (result.success && result.newSessionId) {
+        onForkSession?.(result.newSessionId);
+      }
+    },
+    [sessionId, onForkSession],
+  );
+
+  const handleBookmark = useCallback(
+    async (messageId: string) => {
+      const numericId = parseInt(messageId.replace(/^db-/, ""), 10);
+      if (!Number.isFinite(numericId) || !sessionId) return;
+      await window.hermesAPI.addBookmark(sessionId, numericId);
+    },
+    [sessionId],
+  );
+
   const handleSubmitOrQueue = useCallback(
     (text: string, attachments: Attachment[]) => {
       const suggestedMode = shouldSuggestMode(text);
@@ -583,6 +607,8 @@ useEffect(() => {
             onAbort={handleAbort}
             onApprove={actions.handleApprove}
             onDeny={actions.handleDeny}
+            onFork={handleFork}
+            onBookmark={handleBookmark}
           />
         )}
       </div>

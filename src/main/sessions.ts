@@ -1,5 +1,6 @@
 import Database from "better-sqlite3";
 import { existsSync } from "fs";
+import { randomUUID } from "crypto";
 import { activeStateDbPath } from "./utils";
 import type { Attachment } from "../shared/attachments";
 import { isImageMime } from "../shared/attachments";
@@ -589,6 +590,74 @@ export function deleteSession(sessionId: string): void {
   removeSessionFromCache(sessionId);
 }
 
+/**
+ * Fork a session: create a new session by copying messages from the
+ * original up to (and including) a specific message ID.
+ */
+export function forkSession(
+  sessionId: string,
+  fromMessageId: number,
+): { success: boolean; newSessionId?: string; error?: string } {
+  const db = getDb(false);
+  if (!db) return { success: false, error: "Database not available" };
+
+  try {
+    // Get original session info
+    const session = db
+      .prepare("SELECT id, source, started_at, model, title FROM sessions WHERE id = ?")
+      .get(sessionId) as
+      | { id: string; source: string; started_at: number; model: string; title: string | null }
+      | undefined;
+
+    if (!session) return { success: false, error: "Session not found" };
+
+    // Get messages up to and including fromMessageId
+    const messages = db
+      .prepare(
+        `SELECT id, role, content, timestamp, tool_call_id, tool_calls, tool_name,
+                reasoning, reasoning_content, reasoning_details
+         FROM messages
+         WHERE session_id = ? AND id <= ?
+         ORDER BY timestamp, id`,
+      )
+      .all(sessionId, fromMessageId) as RawMessageRow[];
+
+    if (messages.length === 0) return { success: false, error: "No messages to fork" };
+
+    const newId = randomUUID();
+    const now = Math.floor(Date.now() / 1000);
+    const newTitle = `${session.title || "Untitled"} (fork)`;
+
+    const tx = db.transaction(() => {
+      // Create new session
+      db.prepare(
+        `INSERT INTO sessions (id, source, started_at, message_count, model, title, preview)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      ).run(newId, session.source, now, messages.length, session.model, newTitle, "");
+
+      // Copy messages
+      const insertMsg = db.prepare(
+        `INSERT INTO messages (session_id, role, content, timestamp, tool_call_id, tool_calls, tool_name, reasoning, reasoning_content, reasoning_details)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      );
+      for (const m of messages) {
+        insertMsg.run(
+          newId, m.role, m.content, m.timestamp,
+          m.tool_call_id, m.tool_calls, m.tool_name,
+          m.reasoning, m.reasoning_content, m.reasoning_details,
+        );
+      }
+    });
+    tx();
+
+    return { success: true, newSessionId: newId };
+  } catch (e) {
+    return { success: false, error: String(e) };
+  } finally {
+    db.close();
+  }
+}
+
 export interface SessionExportData {
   id: string;
   title: string;
@@ -697,7 +766,6 @@ export function exportSessionAsMarkdown(sessionId: string): string | null {
           lines.push("");
           break;
         }
-        break;
     }
   }
 

@@ -371,6 +371,60 @@ async function waitForApiServerReady(profile?: string): Promise<boolean> {
 }
 
 // ────────────────────────────────────────────────────
+//  Gateway Metrics
+// ────────────────────────────────────────────────────
+
+export interface GatewayMetrics {
+  totalRequests: number;
+  totalErrors: number;
+  avgLatencyMs: number;
+  uptime: number;
+  platformStats: Record<string, { requests: number; errors: number }>;
+  recentRequests: Array<{ timestamp: number; path: string; status: number; latencyMs: number }>;
+}
+
+export async function fetchGatewayMetrics(profile?: string): Promise<GatewayMetrics | null> {
+  const base = getApiUrl().replace(/\/+$/, "");
+  const authHeaders = getApiHealthHeaders(profile);
+  const paths = ["/api/stats", "/stats", "/api/metrics"];
+  for (const path of paths) {
+    try {
+      const result = await new Promise<string | null>((resolve) => {
+        const target = `${base}${path}`;
+        const mod = target.startsWith("https") ? https : http;
+        const req = mod.request(
+          target,
+          { method: "GET", timeout: 5000, headers: { ...authHeaders } },
+          (res) => {
+            if (res.statusCode !== 200) { res.resume(); resolve(null); return; }
+            let body = "";
+            res.on("data", (d) => { body += d.toString(); });
+            res.on("end", () => resolve(body));
+          },
+        );
+        req.on("error", () => resolve(null));
+        req.on("timeout", () => { req.destroy(); resolve(null); });
+        req.end();
+      });
+      if (result) {
+        const data = JSON.parse(result);
+        return {
+          totalRequests: data.total_requests ?? data.totalRequests ?? 0,
+          totalErrors: data.total_errors ?? data.totalErrors ?? 0,
+          avgLatencyMs: data.avg_latency_ms ?? data.avgLatencyMs ?? 0,
+          uptime: data.uptime ?? 0,
+          platformStats: data.platform_stats ?? data.platformStats ?? {},
+          recentRequests: (data.recent_requests ?? data.recentRequests ?? []).slice(-20),
+        };
+      }
+    } catch {
+      /* try next path */
+    }
+  }
+  return null;
+}
+
+// ────────────────────────────────────────────────────
 //  Ensure API server is enabled in config
 // ────────────────────────────────────────────────────
 

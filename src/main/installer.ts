@@ -5,6 +5,10 @@ import {
   readdirSync,
   writeFileSync,
   unlinkSync,
+  watchFile,
+  unwatchFile,
+  statSync,
+  createReadStream,
 } from "fs";
 import { join, delimiter } from "path";
 import { homedir, tmpdir } from "os";
@@ -16,7 +20,7 @@ import {
   hasOAuthCredentials,
 } from "./config";
 import { providerDoesNotNeedApiKey } from "./providers";
-import { getActiveProfileNameSync, profileHome, stripAnsi } from "./utils";
+import { getActiveProfileNameSync, profileHome, stripAnsi, safeWriteFile } from "./utils";
 import { setupAskpass, AskpassHandle } from "./askpass";
 import { precacheSudoCredentials } from "./sudoCreds";
 import { HIDDEN_SUBPROCESS_OPTIONS } from "./process-options";
@@ -1413,6 +1417,143 @@ export function listMcpServers(
   }
 }
 
+// ── MCP server CRUD ───────────────────────────────────
+
+export interface McpServerInput {
+  name: string;
+  type: "stdio" | "http";
+  command?: string;
+  args?: string[];
+  url?: string;
+  env?: Record<string, string>;
+  enabled?: boolean;
+}
+
+function readConfigYaml(profile?: string): string {
+  const configPath = join(profileHome(profile), "config.yaml");
+  if (!existsSync(configPath)) return "";
+  return readFileSync(configPath, "utf-8");
+}
+
+function writeConfigYaml(content: string, profile?: string): void {
+  const configPath = join(profileHome(profile), "config.yaml");
+  safeWriteFile(configPath, content);
+}
+
+/** Ensure config has a `mcp_servers:` top-level key. */
+function ensureMcpBlock(content: string): { before: string; block: string; after: string } {
+  const match = content.match(/^mcp_servers:\s*\n((?:[ \t]+.+\n)*)/m);
+  if (match) {
+    const start = match.index!;
+    const end = start + match[0].length;
+    return {
+      before: content.slice(0, start),
+      block: match[1],
+      after: content.slice(end),
+    };
+  }
+  // No mcp_servers block — append one
+  const sep = content.endsWith("\n") ? "" : "\n";
+  return {
+    before: content + sep + "mcp_servers:\n",
+    block: "",
+    after: "",
+  };
+}
+
+function serializeMcpServer(input: McpServerInput): string {
+  const lines: string[] = [`  ${input.name}:\n`];
+  if (input.type === "http" && input.url) {
+    lines.push(`    url: ${input.url}\n`);
+  } else {
+    if (input.command) lines.push(`    command: ${input.command}\n`);
+    if (input.args && input.args.length > 0) {
+      lines.push(`    args:\n`);
+      for (const a of input.args) lines.push(`      - "${a.replace(/"/g, '\\"')}"\n`);
+    }
+  }
+  if (input.env && Object.keys(input.env).length > 0) {
+    lines.push(`    env:\n`);
+    for (const [k, v] of Object.entries(input.env)) {
+      lines.push(`      ${k}: "${v.replace(/"/g, '\\"')}"\n`);
+    }
+  }
+  if (input.enabled === false) {
+    lines.push(`    enabled: false\n`);
+  }
+  return lines.join("");
+}
+
+function removeMcpServerBlock(block: string, name: string): string {
+  // Remove the named server from the mcp_servers block
+  const nameRe = new RegExp(`^[ ]{2}${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}:\\s*\\n`, "m");
+  const match = nameRe.exec(block);
+  if (!match) return block;
+  const start = match.index;
+  const startOffset = start + match[0].length;
+  // Find next server name at 2-space indent (or end of block)
+  const nextMatch = /\n {2}[\w]/g;
+  nextMatch.lastIndex = startOffset;
+  const next = nextMatch.exec(block);
+  const end = next ? next.index + 1 : block.length;
+  return block.slice(0, start) + block.slice(end);
+}
+
+export function addMcpServer(input: McpServerInput, profile?: string): { success: boolean; error?: string } {
+  try {
+    if (!input.name || !/^[\w-]+$/.test(input.name)) {
+      return { success: false, error: "Server name must be alphanumeric (dashes allowed)" };
+    }
+    const content = readConfigYaml(profile);
+    const { before, block, after } = ensureMcpBlock(content);
+    // Check for duplicate
+    const existing = removeMcpServerBlock(block, input.name);
+    if (existing !== block) {
+      return { success: false, error: `Server '${input.name}' already exists` };
+    }
+    const newBlock = block + serializeMcpServer(input);
+    const newContent = before + "mcp_servers:\n" + newBlock + after;
+    writeConfigYaml(newContent, profile);
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: String(e) };
+  }
+}
+
+export function removeMcpServer(name: string, profile?: string): { success: boolean; error?: string } {
+  try {
+    const content = readConfigYaml(profile);
+    const { before, block, after } = ensureMcpBlock(content);
+    const newBlock = removeMcpServerBlock(block, name);
+    if (newBlock === block) {
+      return { success: false, error: `Server '${name}' not found` };
+    }
+    const newContent = before + "mcp_servers:\n" + newBlock + after;
+    writeConfigYaml(newContent, profile);
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: String(e) };
+  }
+}
+
+export function updateMcpServer(name: string, input: McpServerInput, profile?: string): { success: boolean; error?: string } {
+  try {
+    const content = readConfigYaml(profile);
+    const { before, block, after } = ensureMcpBlock(content);
+    const removed = removeMcpServerBlock(block, name);
+    if (removed === block) {
+      return { success: false, error: `Server '${name}' not found` };
+    }
+    // Use the new name from input (allows rename)
+    const newBlock = removed + serializeMcpServer(input);
+    const newContent = before + "mcp_servers:\n" + newBlock + after;
+    writeConfigYaml(newContent, profile);
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: String(e) };
+  }
+}
+
 // ────────────────────────────────────────────────────
 //  Log viewer
 // ────────────────────────────────────────────────────
@@ -1439,4 +1580,79 @@ export function readLogs(
   } catch {
     return { content: "", path: fullPath };
   }
+}
+
+// ── Real-time log watching ─────────────────────────────
+
+const ALLOWED_LOGS = ["agent.log", "errors.log", "gateway.log"];
+const logWatchers = new Map<string, { file: string; size: number }>();
+
+export function watchLogs(
+  logFile: string,
+  onChunk: (chunk: string) => void,
+  onDone: () => void,
+): () => void {
+  const file = ALLOWED_LOGS.includes(logFile) ? logFile : "agent.log";
+  const fullPath = join(HERMES_HOME, "logs", file);
+
+  // Stop any existing watcher for this file
+  const existing = logWatchers.get(file);
+  if (existing) {
+    unwatchFile(existing.file);
+    logWatchers.delete(file);
+  }
+
+  if (!existsSync(fullPath)) {
+    onDone();
+    return () => {};
+  }
+
+  let lastSize: number;
+  try {
+    lastSize = statSync(fullPath).size;
+  } catch {
+    onDone();
+    return () => {};
+  }
+
+  logWatchers.set(file, { file: fullPath, size: lastSize });
+
+  watchFile(fullPath, { interval: 1000, persistent: true }, (curr) => {
+    const entry = logWatchers.get(file);
+    if (!entry) return;
+    if (curr.size <= entry.size) return; // no new data or truncated
+
+    // Read new bytes from entry.size to curr.size
+    const start = entry.size;
+    const end = curr.size;
+    try {
+      const stream = createReadStream(fullPath, {
+        start,
+        end: end - 1,
+        encoding: "utf-8",
+      });
+      let chunk = "";
+      stream.on("data", (data: string | Buffer) => {
+        chunk += typeof data === "string" ? data : data.toString("utf-8");
+      });
+      stream.on("end", () => {
+        if (chunk) onChunk(chunk);
+        entry.size = end;
+      });
+      stream.on("error", () => {
+        // ignore read errors
+      });
+    } catch {
+      // ignore
+    }
+  });
+
+  return () => {
+    const entry = logWatchers.get(file);
+    if (entry) {
+      unwatchFile(entry.file);
+      logWatchers.delete(file);
+    }
+    onDone();
+  };
 }

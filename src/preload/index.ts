@@ -387,6 +387,30 @@ const hermesAPI = {
   ): Promise<Record<string, "modified" | "added" | "deleted" | "untracked">> =>
     ipcRenderer.invoke("workspace-git-status", root),
 
+  gitCommit: (
+    root: string,
+    message: string,
+    files?: string[],
+  ): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke("git-commit", root, message, files),
+  gitPush: (root: string): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke("git-push", root),
+  gitPull: (
+    root: string,
+  ): Promise<{ success: boolean; error?: string; output?: string }> =>
+    ipcRenderer.invoke("git-pull", root),
+  gitBranches: (
+    root: string,
+  ): Promise<{ current: string; branches: string[] }> =>
+    ipcRenderer.invoke("git-branches", root),
+  gitSwitchBranch: (
+    root: string,
+    branch: string,
+  ): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke("git-switch-branch", root, branch),
+  gitDiff: (root: string, file?: string): Promise<string> =>
+    ipcRenderer.invoke("git-diff", root, file),
+
   workspaceReadFile: (
     root: string,
     filePath: string,
@@ -473,6 +497,11 @@ const hermesAPI = {
   startGateway: (): Promise<boolean> => ipcRenderer.invoke("start-gateway"),
   stopGateway: (): Promise<boolean> => ipcRenderer.invoke("stop-gateway"),
   gatewayStatus: (): Promise<boolean> => ipcRenderer.invoke("gateway-status"),
+  getGatewayMetrics: (profile?: string): Promise<{
+    totalRequests: number; totalErrors: number; avgLatencyMs: number;
+    uptime: number; platformStats: Record<string, { requests: number; errors: number }>;
+    recentRequests: Array<{ timestamp: number; path: string; status: number; latencyMs: number }>;
+  } | null> => ipcRenderer.invoke("get-gateway-metrics", profile),
 
   // Platform toggles
   getPlatformEnabled: (profile?: string): Promise<Record<string, boolean>> =>
@@ -483,6 +512,18 @@ const hermesAPI = {
     profile?: string,
   ): Promise<boolean> =>
     ipcRenderer.invoke("set-platform-enabled", platform, enabled, profile),
+  getPlatformConfig: (
+    platform: string,
+    profile?: string,
+  ): Promise<Record<string, string>> =>
+    ipcRenderer.invoke("get-platform-config", platform, profile),
+  setPlatformConfigValue: (
+    platform: string,
+    key: string,
+    value: string,
+    profile?: string,
+  ): Promise<boolean> =>
+    ipcRenderer.invoke("set-platform-config-value", platform, key, value, profile),
 
   // Sessions
   listSessions: (
@@ -512,6 +553,25 @@ const hermesAPI = {
       attachments?: Attachment[];
     }>
   > => ipcRenderer.invoke("get-session-messages", sessionId),
+
+  generateLlmSummary: (
+    messages: Array<{ role: string; content: string }>,
+    profile?: string,
+  ): Promise<{ success: boolean; summary?: string; error?: string }> =>
+    ipcRenderer.invoke("generate-llm-summary", messages, profile),
+
+  // Bookmarks
+  addBookmark: (
+    sessionId: string, messageId: number, note?: string,
+  ): Promise<{ id: number; sessionId: string; messageId: number; note: string; createdAt: number } | null> =>
+    ipcRenderer.invoke("add-bookmark", sessionId, messageId, note),
+  removeBookmark: (id: number): Promise<boolean> =>
+    ipcRenderer.invoke("remove-bookmark", id),
+  listBookmarks: (): Promise<Array<{
+    id: number; sessionId: string; messageId: number; note: string; createdAt: number; sessionTitle?: string | null;
+  }>> => ipcRenderer.invoke("list-bookmarks"),
+  updateBookmarkNote: (id: number, note: string): Promise<boolean> =>
+    ipcRenderer.invoke("update-bookmark-note", id, note),
 
   // Profiles
   listProfiles: (): Promise<
@@ -808,6 +868,17 @@ const hermesAPI = {
       installed: boolean;
     }>
   > => ipcRenderer.invoke("list-bundled-skills"),
+  searchSkills: (
+    query: string,
+  ): Promise<
+    Array<{
+      name: string;
+      description: string;
+      category: string;
+      source: string;
+      installed: boolean;
+    }>
+  > => ipcRenderer.invoke("search-skills", query),
   getSkillContent: (skillPath: string): Promise<string> =>
     ipcRenderer.invoke("get-skill-content", skillPath),
   installSkill: (
@@ -856,6 +927,12 @@ const hermesAPI = {
   deleteSession: (sessionId: string): Promise<void> =>
     ipcRenderer.invoke("delete-session", sessionId),
 
+  forkSession: (
+    sessionId: string,
+    fromMessageId: number,
+  ): Promise<{ success: boolean; newSessionId?: string; error?: string }> =>
+    ipcRenderer.invoke("fork-session", sessionId, fromMessageId),
+
   exportSession: (
     sessionId: string,
     format: "markdown" | "json",
@@ -881,6 +958,27 @@ const hermesAPI = {
       snippet: string;
     }>
   > => ipcRenderer.invoke("search-sessions", query, limit),
+
+  // Usage tracking
+  getUsageStats: (
+    fromTs?: number,
+    toTs?: number,
+    profile?: string,
+  ): Promise<{
+    totalPromptTokens: number;
+    totalCompletionTokens: number;
+    totalTokens: number;
+    totalCost: number;
+    totalTurns: number;
+    byModel: Record<string, { tokens: number; cost: number; turns: number }>;
+    byProvider: Record<string, { tokens: number; cost: number; turns: number }>;
+  }> => ipcRenderer.invoke("get-usage-stats", fromTs, toTs, profile),
+  getUsageTrend: (
+    days?: number,
+    profile?: string,
+  ): Promise<
+    Array<{ date: string; tokens: number; cost: number; turns: number }>
+  > => ipcRenderer.invoke("get-usage-trend", days, profile),
 
   // Credential Pool (profile-aware: reads/writes the named profile's
   // auth.json; defaults to the currently active profile when omitted)
@@ -1171,6 +1269,8 @@ const hermesAPI = {
   ) => ipcRenderer.invoke("kanban-create-task", input, profile),
   selectFolder: (): Promise<string | null> =>
     ipcRenderer.invoke("select-folder"),
+  selectFile: (): Promise<string | null> =>
+    ipcRenderer.invoke("select-file"),
   kanbanAssignTask: (
     taskId: string,
     assignee: string | null,
@@ -1233,6 +1333,38 @@ const hermesAPI = {
   ): Promise<
     Array<{ name: string; type: string; enabled: boolean; detail: string }>
   > => ipcRenderer.invoke("list-mcp-servers", profile),
+  addMcpServer: (
+    input: {
+      name: string;
+      type: "stdio" | "http";
+      command?: string;
+      args?: string[];
+      url?: string;
+      env?: Record<string, string>;
+      enabled?: boolean;
+    },
+    profile?: string,
+  ): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke("add-mcp-server", input, profile),
+  removeMcpServer: (
+    name: string,
+    profile?: string,
+  ): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke("remove-mcp-server", name, profile),
+  updateMcpServer: (
+    name: string,
+    input: {
+      name: string;
+      type: "stdio" | "http";
+      command?: string;
+      args?: string[];
+      url?: string;
+      env?: Record<string, string>;
+      enabled?: boolean;
+    },
+    profile?: string,
+  ): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke("update-mcp-server", name, input, profile),
 
   // Log viewer
   readLogs: (
@@ -1240,6 +1372,16 @@ const hermesAPI = {
     lines?: number,
   ): Promise<{ content: string; path: string }> =>
     ipcRenderer.invoke("read-logs", logFile, lines),
+  watchLogs: (logFile?: string): Promise<boolean> =>
+    ipcRenderer.invoke("watch-logs", logFile),
+  stopWatchLogs: (): Promise<boolean> =>
+    ipcRenderer.invoke("stop-watch-logs"),
+  onLogChunk: (callback: (chunk: string) => void): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, chunk: string): void =>
+      callback(chunk);
+    ipcRenderer.on("log-chunk", handler);
+    return () => ipcRenderer.removeListener("log-chunk", handler);
+  },
 
   // Specs management
   listSpecs: (profile?: string): Promise<Array<{title: string; status: string; created: string; sessionId: string; body: string}>> =>
@@ -1254,6 +1396,44 @@ const hermesAPI = {
     ipcRenderer.invoke("delete-spec", name, profile),
   parsePlan: (text: string) =>
     ipcRenderer.invoke("parse-plan", text),
+
+  // Prompt templates
+  listPromptTemplates: (profile?: string): Promise<
+    Array<{ id: string; name: string; category: string; content: string; createdAt: number; updatedAt: number }>
+  > => ipcRenderer.invoke("list-prompt-templates", profile),
+  createPromptTemplate: (
+    input: { name: string; category: string; content: string },
+    profile?: string,
+  ): Promise<{ id: string; name: string; category: string; content: string; createdAt: number; updatedAt: number }> =>
+    ipcRenderer.invoke("create-prompt-template", input, profile),
+  updatePromptTemplate: (
+    id: string,
+    updates: { name?: string; category?: string; content?: string },
+    profile?: string,
+  ): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke("update-prompt-template", id, updates, profile),
+  deletePromptTemplate: (
+    id: string,
+    profile?: string,
+  ): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke("delete-prompt-template", id, profile),
+
+  // Keybindings
+  getKeybindings: (
+    profile?: string,
+  ): Promise<Array<{ id: string; label: string; defaultKey: string; key: string }>> =>
+    ipcRenderer.invoke("get-keybindings", profile),
+  setKeybinding: (
+    id: string,
+    key: string,
+    profile?: string,
+  ): Promise<Array<{ id: string; label: string; defaultKey: string; key: string }>> =>
+    ipcRenderer.invoke("set-keybinding", id, key, profile),
+  resetKeybinding: (
+    id: string,
+    profile?: string,
+  ): Promise<Array<{ id: string; label: string; defaultKey: string; key: string }>> =>
+    ipcRenderer.invoke("reset-keybinding", id, profile),
 };
 
 if (process.contextIsolated) {

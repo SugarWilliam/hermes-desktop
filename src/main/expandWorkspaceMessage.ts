@@ -10,7 +10,8 @@ import {
 import { formatWorkspaceFolderBlock } from "../shared/workspaceContext";
 
 const MAX_SINGLE_FILE = 24 * 1024;
-const MAX_TOTAL_INLINE = 64 * 1024;
+const MAX_TOTAL_INLINE = 48 * 1024; // reduced from 64KB to avoid context overflow
+const MAX_EXPANDED_MESSAGE = 80 * 1024; // hard cap on total expanded message size
 const MAX_RULE_FILES = 24;
 const MAX_SKILL_FILES = 40;
 const MAX_SCAN_DEPTH = 6;
@@ -47,8 +48,19 @@ function isFile(p: string): boolean {
 function readTextFile(path: string, max = MAX_SINGLE_FILE): string {
   try {
     const buf = readFileSync(path);
+    // Skip binary files: check for null bytes in first 8KB
+    const sampleSize = Math.min(buf.length, 8192);
+    for (let i = 0; i < sampleSize; i++) {
+      if (buf[i] === 0) return ""; // binary file — skip
+    }
     const slice = buf.length > max ? buf.subarray(0, max) : buf;
     const text = slice.toString("utf-8");
+    // Skip files that contain too many non-printable characters
+    const nonPrintable = text.split("").filter((c) => {
+      const code = c.charCodeAt(0);
+      return code < 32 && code !== 9 && code !== 10 && code !== 13;
+    }).length;
+    if (nonPrintable > text.length * 0.1) return ""; // likely binary
     return buf.length > max ? `${text}\n\n_(truncated)_` : text;
   } catch {
     return "";
@@ -228,8 +240,26 @@ export interface ExpandedWorkspaceMessage {
 /**
  * Expand compact `@folder:` UI references into agent-visible payloads and
  * optionally inline project rules/skills/mrag for capability-loading requests.
+ * Wrapped in try/catch so workspace expansion failures never block the chat.
  */
 export function expandWorkspaceMessage(
+  message: string,
+  contextFolder?: string,
+): ExpandedWorkspaceMessage {
+  try {
+    return _expandWorkspaceMessageInner(message, contextFolder);
+  } catch (err) {
+    // Never let workspace expansion crash the send — return the original
+    // message with a warning so the agent can still respond.
+    console.warn("[expandWorkspaceMessage] failed:", err);
+    return {
+      message: message + "\n\n_(Workspace expansion failed — some context files could not be loaded.)_",
+      capabilitySystem: null,
+    };
+  }
+}
+
+function _expandWorkspaceMessageInner(
   message: string,
   contextFolder?: string,
 ): ExpandedWorkspaceMessage {
@@ -302,8 +332,14 @@ export function expandWorkspaceMessage(
     }
   }
 
-  return {
+  const result = {
     message: parts.filter(Boolean).join("\n\n"),
     capabilitySystem: systemParts.length > 0 ? systemParts.join("\n\n") : null,
   };
+  // Hard cap: truncate if expanded message is excessively large
+  if (result.message.length > MAX_EXPANDED_MESSAGE) {
+    result.message = result.message.slice(0, MAX_EXPANDED_MESSAGE) +
+      "\n\n_(Workspace content truncated to fit context window.)_";
+  }
+  return result;
 }

@@ -1,5 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { AppearanceSettings } from "./AppearanceSettings";
+import UsageDashboard from "./UsageDashboard";
+import McpManager from "./McpManager";
+import PlatformConfig from "./PlatformConfig";
+import LogViewer from "../../components/LogViewer";
+import KeybindingSettings from "./KeybindingSettings";
 import { useI18n } from "../../components/useI18n";
 import { APP_LOCALES, type AppLocale } from "../../../../shared/i18n";
 import {
@@ -119,9 +124,6 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
   const [importResult, setImportResult] = useState<string | null>(null);
 
   // Log viewer state
-  const [logContent, setLogContent] = useState("");
-  const [logFile, setLogFile] = useState("gateway.log");
-  const [logPath, setLogPath] = useState("");
   const [logsExpanded, setLogsExpanded] = useState(false);
 
   // Network settings
@@ -356,12 +358,6 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
       }
     };
     input.click();
-  }
-
-  async function loadLogs(): Promise<void> {
-    const result = await window.hermesAPI.readLogs(logFile, 300);
-    setLogContent(result.content);
-    setLogPath(result.path);
   }
 
   async function handleDoctor(): Promise<void> {
@@ -1043,12 +1039,39 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
 
       <div className="settings-section">
         <div className="settings-section-title">
+          {t("settings.platform.title")}
+        </div>
+        <PlatformConfig profile={profile} />
+      </div>
+
+      <div className="settings-section">
+        <div className="settings-section-title">
+          {t("settings.mcp.title")}
+        </div>
+        <McpManager profile={profile} />
+      </div>
+
+      <div className="settings-section">
+        <div className="settings-section-title">
+          {t("settings.keybindings.title")}
+        </div>
+        <KeybindingSettings profile={profile} />
+      </div>
+
+      <div className="settings-section">
+        <div className="settings-section-title">
+          {t("settings.usage.title")}
+        </div>
+        <UsageDashboard profile={profile} />
+      </div>
+
+      <div className="settings-section">
+        <div className="settings-section-title">
           <span
             style={{ cursor: "pointer" }}
             onClick={() => {
               const next = !logsExpanded;
               setLogsExpanded(next);
-              if (next) loadLogs();
             }}
           >
             <FileText
@@ -1058,47 +1081,7 @@ function Settings({ profile }: { profile?: string }): React.JSX.Element {
             {t("settings.logsSection")} {logsExpanded ? "▾" : "▸"}
           </span>
         </div>
-        {logsExpanded && (
-          <div className="settings-field">
-            <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-              {["gateway.log", "agent.log", "errors.log"].map((f) => (
-                <button
-                  key={f}
-                  className={`btn btn-sm ${logFile === f ? "btn-primary" : "btn-secondary"}`}
-                  onClick={() => {
-                    setLogFile(f);
-                    window.hermesAPI.readLogs(f, 300).then((r) => {
-                      setLogContent(r.content);
-                      setLogPath(r.path);
-                    });
-                  }}
-                >
-                  {f.replace(".log", "")}
-                </button>
-              ))}
-              <button className="btn btn-sm btn-secondary" onClick={loadLogs}>
-                {t("settings.refresh")}
-              </button>
-            </div>
-            {logPath && (
-              <div className="settings-field-hint" style={{ marginBottom: 4 }}>
-                {logPath}
-              </div>
-            )}
-            <pre
-              className="settings-hermes-doctor"
-              style={{
-                maxHeight: 300,
-                overflow: "auto",
-                fontSize: 11,
-                whiteSpace: "pre-wrap",
-                wordBreak: "break-all",
-              }}
-            >
-              {logContent || t("settings.emptyLog")}
-            </pre>
-          </div>
-        )}
+        {logsExpanded && <LogViewer profile={profile} />}
       </div>
     </div>
   );

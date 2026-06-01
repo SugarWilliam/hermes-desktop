@@ -1,7 +1,8 @@
-import { memo, useCallback, useState } from "react";
+import { memo, useCallback, useEffect, useState } from "react";
 import {
   FileText,
   FolderOpen,
+  GitBranch,
   MessageSquarePlus,
   PanelLeft,
   PanelRight,
@@ -11,6 +12,7 @@ import {
   WorkspaceExplorerTree,
   type WorkspaceEntry,
 } from "./WorkspaceExplorerTree";
+import { GitPanel } from "./GitPanel";
 import { useI18n } from "../../components/useI18n";
 import { AgentMarkdown } from "../../components/AgentMarkdown";
 import { CodeEditor } from "../../components/CodeEditor";
@@ -56,6 +58,22 @@ export const WorkspacePanel = memo(function WorkspacePanel({
   const [explorerSide, setExplorerSide] = useState<ExplorerSide>(readExplorerSide);
   const [explorerWidth, setExplorerWidth] = useState(readExplorerWidth);
   const [error, setError] = useState<string | null>(null);
+  const [gitPanelOpen, setGitPanelOpen] = useState(false);
+  const [gitStatus, setGitStatus] = useState<Record<string, "modified" | "added" | "deleted" | "untracked">>({});
+
+  const loadGitStatus = useCallback(async (): Promise<void> => {
+    try {
+      const status = await window.hermesAPI.workspaceGitStatus(root);
+      setGitStatus(status);
+    } catch {
+      setGitStatus({});
+    }
+  }, [root]);
+
+  useEffect(() => {
+    if (root) loadGitStatus();
+  }, [root, loadGitStatus]);
+
   const isMarkdown =
     selectedFile != null && /\.(md|markdown)$/i.test(selectedFile);
 
@@ -222,6 +240,14 @@ export const WorkspacePanel = memo(function WorkspacePanel({
             <PanelLeft size={14} />
           )}
         </button>
+        <button
+          type="button"
+          className={`btn-ghost chat-workspace-btn ${gitPanelOpen ? "chat-workspace-btn--active" : ""}`}
+          onClick={() => { setGitPanelOpen((p) => !p); if (!gitPanelOpen) loadGitStatus(); }}
+          title={t("chat.git.title")}
+        >
+          <GitBranch size={14} />
+        </button>
       </div>
       {error && <div className="chat-workspace-error">{error}</div>}
       <WorkspaceExplorerTree
@@ -230,6 +256,13 @@ export const WorkspacePanel = memo(function WorkspacePanel({
         onOpenFile={(path) => void openFile(path)}
         onEntryContextMenu={handleEntryContextMenu}
       />
+      {gitPanelOpen && (
+        <GitPanel
+          workspaceRoot={root}
+          gitStatus={gitStatus}
+          onRefresh={loadGitStatus}
+        />
+      )}
     </div>
   );
 

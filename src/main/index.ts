@@ -22,6 +22,12 @@ import {
   writeWorkspaceTextFile,
   pickWorkspaceFiles,
   getWorkspaceGitStatus,
+  gitCommit,
+  gitPush,
+  gitPull,
+  gitBranches,
+  gitSwitchBranch,
+  gitDiff,
 } from "./workspace";
 import { applyUnifiedDiff } from "./diff";
 import { readLocalAttachmentFile } from "./localAttachmentFile";
@@ -49,10 +55,21 @@ import {
   runHermesImport,
   runHermesDump,
   listMcpServers,
+  addMcpServer,
+  removeMcpServer,
+  updateMcpServer,
+  watchLogs,
+  type McpServerInput,
   discoverMemoryProviders,
   readLogs,
   InstallProgress,
 } from "./installer";
+import {
+  listPromptTemplates,
+  createPromptTemplate,
+  updatePromptTemplate,
+  deletePromptTemplate,
+} from "./prompt-templates";
 import { updaterLogger } from "./updater-log";
 import {
   runHermesAuthLogin,
@@ -72,6 +89,9 @@ import {
   ensureSshTunnelIfNeeded,
   setSshRemoteApiKey,
   getRemoteAuthHeader,
+  fetchGatewayMetrics,
+  getApiUrl,
+  getApiHealthHeaders,
 } from "./hermes";
 import {
   startSshTunnel,
@@ -114,6 +134,8 @@ import {
   setConnectionConfig,
   getPlatformEnabled,
   setPlatformEnabled,
+  getPlatformConfig,
+  setPlatformConfigValue,
   getApiServerKey,
 } from "./config";
 import {
@@ -121,20 +143,38 @@ import {
   getSessionMessages,
   searchSessions,
   deleteSession,
+  forkSession,
   exportSessionAsMarkdown,
   exportSessionAsJson,
 } from "./sessions";
 import {
   shouldSuggestSummarization,
   generateSessionDigest,
+  generateLlmSummary,
   digestToMemoryEntry,
 } from "./session-summarizer";
+import {
+  addBookmark,
+  removeBookmark,
+  listBookmarks,
+  updateBookmarkNote,
+} from "./bookmarks";
+import {
+  getKeybindings,
+  setKeybinding,
+  resetKeybinding,
+} from "./keybindings";
 import {
   syncSessionCache,
   listCachedSessions,
   updateSessionTitle,
   registerDesktopSession,
 } from "./session-cache";
+import {
+  recordUsage,
+  getUsageStats,
+  getUsageTrend,
+} from "./usage-tracker";
 import { listModels, addModel, removeModel, updateModel } from "./models";
 import {
   listProfiles,
@@ -188,6 +228,7 @@ import {
   uninstallSkill,
   getDisabledSkills,
   setSkillEnabled,
+  searchSkills,
 } from "./skills";
 import {
   listCronJobs,
@@ -233,6 +274,7 @@ import {
   sshInstallSkill,
   sshUninstallSkill,
   sshListBundledSkills,
+  sshSearchSkills,
   sshReadMemory,
   sshAddMemoryEntry,
   sshUpdateMemoryEntry,
@@ -942,6 +984,21 @@ function setupIPC(): void {
             safeSend("chat-tool-progress", tool);
           },
           onUsage: (usage) => {
+            // Persist usage for dashboard
+            try {
+              recordUsage({
+                sessionId: activeSessionId || "",
+                model: mc.model || "",
+                provider: mc.provider || "",
+                promptTokens: usage.promptTokens,
+                completionTokens: usage.completionTokens,
+                totalTokens: usage.totalTokens,
+                cost: usage.cost,
+                profile,
+              });
+            } catch {
+              /* best-effort */
+            }
             safeSend("chat-usage", usage);
           },
         },
@@ -1122,6 +1179,9 @@ function setupIPC(): void {
     if (conn.mode === "ssh" && conn.ssh) return sshGatewayStatus(conn.ssh);
     return isGatewayRunning();
   });
+  ipcMain.handle("get-gateway-metrics", (_event, profile?: string) => {
+    return fetchGatewayMetrics(profile);
+  });
 
   // Platform toggles (config.yaml platforms section)
   ipcMain.handle("get-platform-enabled", (_event, profile?: string) => {
@@ -1147,6 +1207,23 @@ function setupIPC(): void {
     },
   );
 
+  // Platform detailed config
+  ipcMain.handle(
+    "get-platform-config",
+    (_event, platform: string, profile?: string) =>
+      getPlatformConfig(platform, profile),
+  );
+  ipcMain.handle(
+    "set-platform-config-value",
+    (_event, platform: string, key: string, value: string, profile?: string) => {
+      const result = setPlatformConfigValue(platform, key, value, profile);
+      if (result && isGatewayRunning()) {
+        restartGateway(profile);
+      }
+      return result;
+    },
+  );
+
   // Sessions
   ipcMain.handle("list-sessions", (_event, limit?: number, offset?: number) => {
     const conn = getConnectionConfig();
@@ -1166,6 +1243,10 @@ function setupIPC(): void {
     return deleteSession(sessionId);
   });
 
+  ipcMain.handle("fork-session", (_event, sessionId: string, fromMessageId: number) => {
+    return forkSession(sessionId, fromMessageId);
+  });
+
   // Session summarization
   ipcMain.handle(
     "check-summarization-triggers",
@@ -1180,11 +1261,47 @@ function setupIPC(): void {
     },
   );
   ipcMain.handle(
+    "generate-llm-summary",
+    async (_event, messages: Array<{ role: string; content: string }>, profile?: string) => {
+      return generateLlmSummary(messages, {
+        getApiUrl,
+        getApiHealthHeaders: (p) => getApiHealthHeaders(p),
+        getModelConfig: (p) => getModelConfig(p),
+        profile,
+      });
+    },
+  );
+  ipcMain.handle(
     "digest-to-memory-entry",
     (_event, digest: { sessionId: string; title: string; startedAt: number; messageCount: number; keyTopics: string[]; summary: string }) => {
       return digestToMemoryEntry(digest);
     },
   );
+
+  // Bookmarks
+  ipcMain.handle("add-bookmark", (_event, sessionId: string, messageId: number, note?: string) => {
+    return addBookmark(sessionId, messageId, note);
+  });
+  ipcMain.handle("remove-bookmark", (_event, id: number) => {
+    return removeBookmark(id);
+  });
+  ipcMain.handle("list-bookmarks", () => {
+    return listBookmarks();
+  });
+  ipcMain.handle("update-bookmark-note", (_event, id: number, note: string) => {
+    return updateBookmarkNote(id, note);
+  });
+
+  // Keybindings
+  ipcMain.handle("get-keybindings", (_event, profile?: string) => {
+    return getKeybindings(profile);
+  });
+  ipcMain.handle("set-keybinding", (_event, id: string, key: string, profile?: string) => {
+    return setKeybinding(id, key, profile);
+  });
+  ipcMain.handle("reset-keybinding", (_event, id: string, profile?: string) => {
+    return resetKeybinding(id, profile);
+  });
 
   // Specs management
   ipcMain.handle(
@@ -1221,6 +1338,29 @@ function setupIPC(): void {
     "parse-plan",
     (_event, text: string) => {
       return parsePlanOutput(text);
+    },
+  );
+
+  // Prompt templates
+  ipcMain.handle("list-prompt-templates", (_event, profile?: string) => {
+    return listPromptTemplates(profile);
+  });
+  ipcMain.handle(
+    "create-prompt-template",
+    (_event, input: { name: string; category: string; content: string }, profile?: string) => {
+      return createPromptTemplate(input, profile);
+    },
+  );
+  ipcMain.handle(
+    "update-prompt-template",
+    (_event, id: string, updates: { name?: string; category?: string; content?: string }, profile?: string) => {
+      return updatePromptTemplate(id, updates, profile);
+    },
+  );
+  ipcMain.handle(
+    "delete-prompt-template",
+    (_event, id: string, profile?: string) => {
+      return deletePromptTemplate(id, profile);
     },
   );
 
@@ -1584,6 +1724,15 @@ function setupIPC(): void {
       return uninstallSkill(name, _profile);
     },
   );
+  ipcMain.handle(
+    "search-skills",
+    (_event, query: string) => {
+      const conn = getConnectionConfig();
+      if (conn.mode === "ssh" && conn.ssh)
+        return sshSearchSkills(conn.ssh, query);
+      return searchSkills(query);
+    },
+  );
 
   // Skills enable/disable
   ipcMain.handle(
@@ -1647,6 +1796,20 @@ function setupIPC(): void {
       return sshSearchSessions(conn.ssh, query, limit);
     return searchSessions(query, limit);
   });
+
+  // Usage tracking
+  ipcMain.handle(
+    "get-usage-stats",
+    (_event, fromTs?: number, toTs?: number, profile?: string) => {
+      return getUsageStats(fromTs, toTs, profile);
+    },
+  );
+  ipcMain.handle(
+    "get-usage-trend",
+    (_event, days?: number, profile?: string) => {
+      return getUsageTrend(days ?? 30, profile);
+    },
+  );
 
   // Credential Pool — profile-aware. When `profile` is omitted, the
   // credential pool helpers default to the currently active profile's
@@ -1868,6 +2031,14 @@ function setupIPC(): void {
     if (result.canceled || result.filePaths.length === 0) return null;
     return result.filePaths[0];
   });
+  ipcMain.handle("select-file", async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    const result = win
+      ? await dialog.showOpenDialog(win, { properties: ["openFile"] })
+      : await dialog.showOpenDialog({ properties: ["openFile"] });
+    if (result.canceled || result.filePaths.length === 0) return null;
+    return result.filePaths[0];
+  });
 
   ipcMain.handle(
     "workspace-list-dir",
@@ -1877,6 +2048,24 @@ function setupIPC(): void {
   );
   ipcMain.handle("workspace-git-status", async (_event, root: string) => {
     return getWorkspaceGitStatus(root);
+  });
+  ipcMain.handle("git-commit", async (_event, root: string, message: string, files?: string[]) => {
+    return gitCommit(root, message, files);
+  });
+  ipcMain.handle("git-push", async (_event, root: string) => {
+    return gitPush(root);
+  });
+  ipcMain.handle("git-pull", async (_event, root: string) => {
+    return gitPull(root);
+  });
+  ipcMain.handle("git-branches", async (_event, root: string) => {
+    return gitBranches(root);
+  });
+  ipcMain.handle("git-switch-branch", async (_event, root: string, branch: string) => {
+    return gitSwitchBranch(root, branch);
+  });
+  ipcMain.handle("git-diff", async (_event, root: string, file?: string) => {
+    return gitDiff(root, file);
   });
   ipcMain.handle(
     "workspace-read-file",
@@ -1983,6 +2172,21 @@ function setupIPC(): void {
   ipcMain.handle("list-mcp-servers", (_event, profile?: string) =>
     listMcpServers(profile),
   );
+  ipcMain.handle(
+    "add-mcp-server",
+    (_event, input: McpServerInput, profile?: string) =>
+      addMcpServer(input, profile),
+  );
+  ipcMain.handle(
+    "remove-mcp-server",
+    (_event, name: string, profile?: string) =>
+      removeMcpServer(name, profile),
+  );
+  ipcMain.handle(
+    "update-mcp-server",
+    (_event, name: string, input: McpServerInput, profile?: string) =>
+      updateMcpServer(name, input, profile),
+  );
 
   // Memory providers
   ipcMain.handle("discover-memory-providers", (_event, profile?: string) => {
@@ -1998,6 +2202,32 @@ function setupIPC(): void {
     if (conn.mode === "ssh" && conn.ssh)
       return sshReadLogs(conn.ssh, logFile, lines);
     return readLogs(logFile, lines);
+  });
+
+  // Real-time log watching
+  let stopLogWatch: (() => void) | null = null;
+  ipcMain.handle("watch-logs", (event, logFile?: string) => {
+    if (stopLogWatch) {
+      stopLogWatch();
+      stopLogWatch = null;
+    }
+    stopLogWatch = watchLogs(
+      logFile || "agent.log",
+      (chunk: string) => {
+        event.sender.send("log-chunk", chunk);
+      },
+      () => {
+        stopLogWatch = null;
+      },
+    );
+    return true;
+  });
+  ipcMain.handle("stop-watch-logs", () => {
+    if (stopLogWatch) {
+      stopLogWatch();
+      stopLogWatch = null;
+    }
+    return true;
   });
 }
 
