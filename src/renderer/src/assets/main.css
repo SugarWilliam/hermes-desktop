@@ -1928,7 +1928,7 @@ body.chat-split-resizing {
   width: 100%;
   max-width: 100%;
   animation: messageIn 0.2s ease;
-  padding: 4px 0 12px;
+  padding: 4px 0 14px;
 }
 
 .chat-transcript-block--user {
@@ -1942,7 +1942,7 @@ body.chat-split-resizing {
 }
 
 .chat-transcript-block--agent {
-  padding-bottom: 20px;
+  padding-bottom: 24px;
 }
 
 .chat-transcript-block--user .chat-transcript-user-text {
@@ -3055,11 +3055,11 @@ body.chat-split-resizing {
 .chat-input-wrapper {
   display: flex;
   align-items: flex-end;
-  gap: 8px;
+  gap: 6px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-bright);
   border-radius: var(--radius-lg);
-  padding: 8px 8px 8px 12px;
+  padding: 6px 8px 6px 10px;
   transition: border-color var(--transition);
 }
 
@@ -3074,10 +3074,10 @@ body.chat-split-resizing {
   color: var(--text-primary);
   font-size: 13px;
   font-family: var(--font-sans);
-  padding: 6px 0;
+  padding: 4px 0;
   outline: none;
   resize: none;
-  min-height: 44px;
+  min-height: 40px;
   max-height: 200px;
   overflow-y: hidden;
   line-height: 1.5;
@@ -3089,8 +3089,8 @@ body.chat-split-resizing {
 }
 
 .chat-send-btn {
-  width: 34px;
-  height: 34px;
+  width: 32px;
+  height: 32px;
   border-radius: var(--radius-sm);
   background: var(--accent);
   border: none;
@@ -3123,8 +3123,8 @@ body.chat-split-resizing {
 /* ── Attachments ────────────────────────────────────── */
 
 .chat-attach-btn {
-  width: 34px;
-  height: 34px;
+  width: 32px;
+  height: 32px;
   border-radius: var(--radius-sm);
   background: transparent;
   border: none;
@@ -3155,7 +3155,7 @@ body.chat-split-resizing {
   gap: 6px;
   align-items: center;
   margin-bottom: 6px;
-  padding: 4px 0;
+  padding: 2px 0;
   max-height: 72px;
   overflow-y: auto;
 }
@@ -3171,9 +3171,9 @@ body.chat-split-resizing {
   position: relative;
   display: inline-flex;
   align-items: center;
-  border-radius: var(--radius-sm);
-  background: var(--bg-primary);
-  border: 1px solid var(--border-bright);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .attachment-chip-thumb {
@@ -3183,10 +3183,10 @@ body.chat-split-resizing {
   background: none;
   border: none;
   cursor: pointer;
-  border-radius: var(--radius-sm);
+  border-radius: 6px;
   overflow: hidden;
-  width: 56px;
-  height: 56px;
+  width: 52px;
+  height: 52px;
 }
 
 .attachment-chip-thumb img {
@@ -3200,7 +3200,7 @@ body.chat-split-resizing {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 10px;
+  padding: 5px 10px;
   color: var(--text-primary);
   font-size: 12px;
   max-width: 220px;
@@ -3214,20 +3214,21 @@ body.chat-split-resizing {
 
 .attachment-chip-remove {
   position: absolute;
-  top: -6px;
-  right: -6px;
-  width: 18px;
-  height: 18px;
+  top: -5px;
+  right: -5px;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
   background: var(--bg-secondary);
-  border: 1px solid var(--border-bright);
-  color: var(--text-primary);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--text-muted);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 0;
   line-height: 0;
+  transition: all 0.15s ease;
 }
 
 .attachment-chip-remove:hover {
@@ -3240,7 +3241,7 @@ body.chat-split-resizing {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
 }
 
 /* Drop overlay covers the whole chat container while a file drag is active */

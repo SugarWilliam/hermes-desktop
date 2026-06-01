@@ -1,7 +1,7 @@
-/* 对话 → 思考 → 执行 → 结果 四段式 Agent 流 — Qoder-style */
+/* 对话 → 思考 → 执行 → 结果 四段式 Agent 流 — Qoder-style refined */
 
 .paradigm-dialogue {
-  padding: 10px 0 6px;
+  padding: 12px 0 8px;
   border-top: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.06));
 }
 
@@ -9,25 +9,32 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px 10px;
+  gap: 6px 8px;
 }
 
 .paradigm-file-chip {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 3px 9px;
+  gap: 6px;
+  padding: 4px 10px;
   border-radius: 6px;
-  background: var(--bg-elevated, #2a2a2a);
-  border: 1px solid var(--border, rgba(255, 255, 255, 0.06));
-  font-size: 12.5px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 12px;
   color: var(--text-primary, #e8e8e8);
   font-family: var(--font-sans);
+  line-height: 1.3;
+  transition: background 0.15s ease;
+}
+
+.paradigm-file-chip:hover {
+  background: rgba(255, 255, 255, 0.07);
 }
 
 .paradigm-file-chip-icon {
   color: var(--text-muted, #8e8e8e);
   flex-shrink: 0;
+  opacity: 0.7;
 }
 
 .paradigm-file-chip-name {
@@ -38,20 +45,21 @@
 }
 
 .paradigm-dialogue-action {
-  font-size: 12.5px;
+  font-size: 13px;
   color: var(--text-secondary, #a3a3a3);
+  line-height: 1.5;
 }
 
 .paradigm-dialogue-text {
-  margin-top: 6px;
+  margin-top: 8px;
   font-size: 14px;
-  line-height: 1.6;
+  line-height: 1.65;
   color: var(--text-primary, #e8e8e8);
   white-space: pre-wrap;
 }
 
 .paradigm-dialogue-attachments {
-  margin-top: 6px;
+  margin-top: 8px;
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
@@ -62,38 +70,38 @@
   contain: layout style;
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding: 2px 0 14px;
+  gap: 1px;
+  padding: 4px 0 16px;
   font-family: var(--font-sans);
-  font-size: 13.5px;
-  line-height: 1.55;
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 /* ── Phase sections ───────────────────────────────── */
 .paradigm-phase {
-  margin: 1px 0;
+  margin: 0;
   border-left: 2px solid var(--border, rgba(255, 255, 255, 0.06));
   border-radius: 0;
 }
 
 .paradigm-phase--thinking {
-  border-left-color: rgba(168, 130, 255, 0.35);
+  border-left-color: rgba(168, 130, 255, 0.4);
 }
 
 .paradigm-phase--execution {
-  border-left-color: rgba(34, 197, 94, 0.25);
+  border-left-color: rgba(34, 197, 94, 0.3);
 }
 
 .paradigm-phase--result {
-  border-left-color: rgba(56, 189, 248, 0.30);
+  border-left-color: rgba(56, 189, 248, 0.35);
 }
 
 .paradigm-phase-head {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
   width: 100%;
-  padding: 5px 0 5px 10px;
+  padding: 6px 8px 6px 12px;
   border: none;
   background: transparent;
   color: var(--text-secondary, #b4b4b4);
@@ -102,6 +110,7 @@
   cursor: pointer;
   text-align: left;
   letter-spacing: 0.01em;
+  transition: color 0.15s ease;
 }
 
 .paradigm-phase-head--static {
@@ -114,7 +123,7 @@
 
 .paradigm-phase-icon {
   flex-shrink: 0;
-  opacity: 0.9;
+  opacity: 0.85;
 }
 
 .paradigm-phase--thinking .paradigm-phase-icon {
@@ -130,13 +139,13 @@
 }
 
 .paradigm-phase-title {
-  font-weight: 500;
+  font-weight: 600;
   letter-spacing: 0.01em;
 }
 
 .paradigm-phase-chevron {
   margin-left: auto;
-  opacity: 0.45;
+  opacity: 0.4;
   transition: transform 0.18s ease;
 }
 
@@ -145,16 +154,18 @@
 }
 
 .paradigm-phase-body {
-  padding: 4px 0 8px 22px;
+  padding: 2px 0 10px 24px;
 }
 
 .paradigm-phase-body--thinking {
-  padding-left: 12px;
+  padding-left: 14px;
+  padding-top: 4px;
 }
 
 .paradigm-phase-body--result {
-  padding-left: 12px;
+  padding-left: 14px;
   padding-right: 0;
+  padding-top: 4px;
 }
 
 .paradigm-phase--result .paradigm-phase-head {
@@ -163,20 +174,22 @@
 
 .paradigm-processing {
   margin-left: auto;
-  font-size: 11.5px;
+  font-size: 11px;
   color: var(--text-muted, #8e8e8e);
   font-style: italic;
+  letter-spacing: 0.02em;
 }
 
 /* ── Execution lines ──────────────────────────────── */
 .paradigm-exec-line {
   display: flex;
   align-items: center;
-  gap: 7px;
-  padding: 2px 0;
+  gap: 8px;
+  padding: 3px 0;
   font-size: 12.5px;
   color: var(--text-secondary, #b4b4b4);
   font-family: var(--font-sans);
+  line-height: 1.45;
 }
 
 .paradigm-exec-em {
@@ -186,7 +199,7 @@
 
 .paradigm-exec-detail {
   margin-left: 4px;
-  font-size: 11.5px;
+  font-size: 11px;
   color: var(--text-muted, #8e8e8e);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -216,10 +229,10 @@
 
 /* ── Terminal block ───────────────────────────────── */
 .paradigm-terminal {
-  margin: 4px 0 8px;
+  margin: 4px 0 10px;
   border-radius: 8px;
   overflow: hidden;
-  border: 1px solid var(--border, rgba(255, 255, 255, 0.06));
+  border: 1px solid rgba(255, 255, 255, 0.06);
   border-top: 2px solid var(--accent, #22c55e);
   background: var(--bg-secondary, #171717);
 }
@@ -227,18 +240,18 @@
 .paradigm-terminal-bar {
   display: flex;
   align-items: center;
-  gap: 7px;
-  padding: 6px 11px;
+  gap: 8px;
+  padding: 6px 12px;
   font-size: 11.5px;
   font-family: var(--font-sans);
   font-weight: 500;
   color: var(--accent, #4ade80);
-  border-bottom: 1px solid var(--border, rgba(255, 255, 255, 0.04));
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
 }
 
 .paradigm-terminal-cmd {
   margin: 0;
-  padding: 8px 11px;
+  padding: 8px 12px;
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 12px;
   line-height: 1.5;
@@ -304,27 +317,28 @@
   display: flex;
   flex-direction: column;
   gap: 0;
+  padding: 1px 0;
 }
 
 /* ── Tool call detail panel ─────────────────────────── */
 .paradigm-tool-detail {
-  margin-left: 19px;
-  margin-top: 1px;
-  margin-bottom: 3px;
+  margin-left: 20px;
+  margin-top: 0;
+  margin-bottom: 4px;
 }
 
 .paradigm-tool-detail-toggle {
   display: flex;
   align-items: center;
   gap: 5px;
-  padding: 2px 0;
+  padding: 3px 0;
   border: none;
   background: transparent;
   color: var(--text-muted, #8e8e8e);
   font-size: 11px;
   font-family: var(--font-sans);
   cursor: pointer;
-  opacity: 0.7;
+  opacity: 0.65;
   transition: opacity 0.15s ease, color 0.15s ease;
 }
 
@@ -348,11 +362,11 @@
 }
 
 .paradigm-tool-detail-body {
-  margin-top: 3px;
-  padding: 6px 8px;
+  margin-top: 4px;
+  padding: 8px 10px;
   border-radius: 6px;
-  background: var(--bg-secondary, #171717);
-  border: 1px solid var(--border, rgba(255, 255, 255, 0.05));
+  background: rgba(0, 0, 0, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.05);
   font-size: 11.5px;
 }
 

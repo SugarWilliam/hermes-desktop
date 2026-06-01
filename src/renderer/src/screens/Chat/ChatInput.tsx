@@ -28,7 +28,7 @@ import {
 /** Must match `.chat-input` max-height in main.css */
 const CHAT_INPUT_MAX_HEIGHT_PX = 200;
 /** Must match `.chat-input` min-height in main.css */
-const CHAT_INPUT_MIN_HEIGHT_PX = 44;
+const CHAT_INPUT_MIN_HEIGHT_PX = 40;
 
 function resizeChatTextarea(el: HTMLTextAreaElement): void {
   el.style.height = "auto";
